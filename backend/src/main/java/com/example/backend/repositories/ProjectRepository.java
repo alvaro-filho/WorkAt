@@ -19,6 +19,8 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
      */
     List<Project> findByCreatedByUser(com.example.backend.models.User createdByUser);
 
+    Optional<Project> findByIdAndCreatedByUser(Long id, com.example.backend.models.User createdByUser);
+
     /**
      * Encontra um projeto pelo seu slug (URL amigável).
      * @param slug O slug do projeto.

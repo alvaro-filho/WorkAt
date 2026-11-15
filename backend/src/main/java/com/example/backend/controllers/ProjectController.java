@@ -1,11 +1,14 @@
 package com.example.backend.controllers;
 
 import com.example.backend.models.Project;
+import com.example.backend.dto.ProjectCreateRequest;
 import com.example.backend.services.ProjectService;
 import com.example.backend.repositories.UserRepository;
 import com.example.backend.models.User;
 import org.springframework.security.core.Authentication;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import java.util.List;
@@ -33,8 +36,7 @@ public class ProjectController {
      */
     @GetMapping
     public ResponseEntity<List<Project>> getAllProjects(Authentication authentication) {
-        User user = userRepository.findByEmail(authentication.getName())
-                .orElseThrow(() -> new IllegalStateException("Usuário autenticado não encontrado."));
+        User user = findAuthenticatedUser(authentication);
         List<Project> projects = projectService.findProjectsForUser(user);
         return ResponseEntity.ok(projects);
     }
@@ -46,8 +48,13 @@ public class ProjectController {
      * @return ResponseEntity com o projeto ou 404 Not Found.
      */
     @GetMapping("/{projectId}")
-    public ResponseEntity<Project> getProjectById(@PathVariable Long projectId) {
-        Optional<Project> project = projectService.findProjectById(projectId);
+    public ResponseEntity<Project> getProjectById(
+            @PathVariable Long projectId,
+            Authentication authentication
+    ) {
+        User user = findAuthenticatedUser(authentication);
+        // Temporary creator-only policy until project membership is implemented in Etapa B.
+        Optional<Project> project = projectService.findProjectByIdForCreator(projectId, user);
         return project.map(ResponseEntity::ok)
                       .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -55,24 +62,28 @@ public class ProjectController {
     /**
      * Endpoint para criar um novo projeto. (Assumindo que o usuário autenticado é o criador).
      * POST /api/v1/projects
-     * @param projectDetails Os detalhes do projeto.
+     * @param projectDetails Campos permitidos para a criação do projeto.
      * @param currentUser O usuário que está realizando a criação.
      * @return ResponseEntity com o projeto criado.
      */
     @PostMapping
     @PreAuthorize("hasRole('ARTIST')")
     public ResponseEntity<Project> createProject(
-            @RequestBody Project projectDetails,
-            @RequestHeader("X-User-Id") Long currentUser) {
-        
-        // Implementação de segurança deve garantir que o 'currentUser' seja o usuário autenticado
-        // Em um ambiente real, usaríamos SecurityContextHolder.
-        // Por enquanto, usamos o header simulado para fins de teste.
-        Project newProject = projectService.createProject(projectDetails, new com.example.backend.models.User(/* dummy user */)); 
-        
-        // Nota: O dummy user precisa ser ajustado para funcionar com o contexto de segurança real.
-        // Por enquanto, o serviço deve ser ajustado para aceitar um User ou ID.
-        
+            @RequestBody ProjectCreateRequest projectDetails,
+            Authentication authentication) {
+        User creator = findAuthenticatedUser(authentication);
+        Project newProject = projectService.createProject(projectDetails.toNewProject(), creator);
         return ResponseEntity.status(201).body(newProject);
+    }
+
+    private User findAuthenticatedUser(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário autenticado não identificado.");
+        }
+        return userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Usuário autenticado não encontrado."
+                ));
     }
 }

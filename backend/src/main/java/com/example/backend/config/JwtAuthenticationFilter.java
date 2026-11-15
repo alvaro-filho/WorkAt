@@ -1,6 +1,7 @@
 package com.example.backend.config;
 
 import com.example.backend.repositories.UserRepository;
+import com.example.backend.models.Role;
 import com.example.backend.services.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -50,12 +51,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             String email = jwtService.extractSubject(token);
             userRepository.findByEmail(email).ifPresent(user -> {
-                var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+                var authorities = List.of(new SimpleGrantedAuthority(normalizeAuthority(user.getRole())));
                 var authentication = new UsernamePasswordAuthenticationToken(email, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             });
         } catch (RuntimeException ignored) {
             SecurityContextHolder.clearContext();
         }
+    }
+
+    static String normalizeAuthority(Role role) {
+        String roleName = role.name();
+        return roleName.startsWith("ROLE_") ? roleName : "ROLE_" + roleName;
     }
 }

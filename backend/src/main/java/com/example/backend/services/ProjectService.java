@@ -50,6 +50,14 @@ public class ProjectService {
     }
 
     /**
+     * Temporary access rule until ProjectMember is implemented: only the creator can read the project.
+     */
+    @Transactional(readOnly = true)
+    public Optional<Project> findProjectByIdForCreator(Long projectId, User creator) {
+        return projectRepository.findByIdAndCreatedByUser(projectId, creator);
+    }
+
+    /**
      * Cria um novo projeto no sistema.
      * @param project Os dados do projeto a ser criado.
      * @param creator O usuário que está criando o projeto.
