@@ -47,6 +47,7 @@ export class ApiError extends Error {
 }
 
 let unauthorizedHandler: (() => void) | null = null;
+let sessionVerification: Promise<void> | null = null;
 
 export function setUnauthorizedHandler(handler: (() => void) | null) {
   unauthorizedHandler = handler;
@@ -63,15 +64,17 @@ function clearSession() {
 async function request<T>(
   path: string,
   init: RequestInit = {},
-  options: { logoutOnForbidden?: boolean } = {},
+  options: { authFailure?: "logout" | "verify-session" | "ignore" } = {},
 ): Promise<T> {
+  if (typeof window === "undefined") {
+    throw new Error("As chamadas à API só podem ser feitas no navegador.");
+  }
+
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem("authToken");
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-  }
+  const token = window.localStorage.getItem("authToken");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const response = await fetch(`/api/v1${path}`, { ...init, headers });
   const responseText = await response.text();
@@ -89,13 +92,19 @@ async function request<T>(
         : data && typeof data === "object" && "message" in data && typeof data.message === "string"
           ? data.message
           : `A solicitação falhou (${response.status}).`;
-    const indicatesExpiredSession =
-      response.status === 403 && /token|jwt|expirad|inválid|autentica|acesso negado/i.test(message);
-    if (
-      response.status === 403 &&
-      (options.logoutOnForbidden !== false || indicatesExpiredSession)
-    ) {
-      clearSession();
+    if (response.status === 401 || response.status === 403) {
+      const method = (init.method ?? "GET").toUpperCase();
+      const authEndpoint = path.startsWith("/auth/");
+      const authFailure =
+        options.authFailure ??
+        (authEndpoint
+          ? "ignore"
+          : method === "GET" || method === "HEAD"
+            ? "logout"
+            : "verify-session");
+
+      if (authFailure === "logout") clearSession();
+      if (authFailure === "verify-session") await verifySession();
     }
     throw new ApiError(message || `A solicitação falhou (${response.status}).`, response.status);
   }
@@ -103,25 +112,54 @@ async function request<T>(
   return data as T;
 }
 
+function verifySession(): Promise<void> {
+  if (sessionVerification) return sessionVerification;
+
+  sessionVerification = (async () => {
+    try {
+      // This request must not enter the verification path again.
+      await request<Project[]>("/projects", { method: "GET" }, { authFailure: "ignore" });
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        clearSession();
+      }
+      // Network errors and other server errors do not prove that the session is invalid.
+    }
+  })().finally(() => {
+    sessionVerification = null;
+  });
+
+  return sessionVerification;
+}
+
 export const api = {
   login: (email: string, password: string) =>
-    request<AuthResponse>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
+    request<AuthResponse>(
+      "/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      },
+      { authFailure: "ignore" },
+    ),
   register: (payload: {
     username: string;
     fullName: string;
     email: string;
     password: string;
     role: ApiUser["role"];
-  }) => request<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
+  }) =>
+    request<AuthResponse>(
+      "/auth/register",
+      { method: "POST", body: JSON.stringify(payload) },
+      { authFailure: "ignore" },
+    ),
   projects: () => request<Project[]>("/projects"),
   createProject: (payload: Omit<Project, "id">) =>
     request<Project>(
       "/projects",
       { method: "POST", body: JSON.stringify(payload) },
-      { logoutOnForbidden: false },
+      { authFailure: "verify-session" },
     ),
   tasks: (projectId: number) => request<ApiTask[]>(`/projects/${projectId}/tasks`),
   createTask: (
