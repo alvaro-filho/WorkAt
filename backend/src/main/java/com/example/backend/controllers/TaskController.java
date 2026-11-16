@@ -53,6 +53,13 @@ public class TaskController {
         return ResponseEntity.ok(TaskResponse.from(task));
     }
 
+    @DeleteMapping("/api/v1/tasks/{taskId}")
+    public ResponseEntity<Void> deleteTask(@PathVariable Long taskId, Authentication authentication) {
+        User creator = findAuthenticatedUser(authentication);
+        taskService.deleteTask(taskId, creator);
+        return ResponseEntity.noContent().build();
+    }
+
     private User findAuthenticatedUser(Authentication authentication) {
         if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário autenticado não identificado.");

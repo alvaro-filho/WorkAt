@@ -1,6 +1,7 @@
 package com.example.backend.repositories;
 
 import com.example.backend.models.ActivityEvent;
+import com.example.backend.models.Project;
 import com.example.backend.dto.HeatmapDTO;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -10,6 +11,8 @@ import java.util.List;
 import java.time.LocalDate;
 
 public interface ActivityEventRepository extends JpaRepository<ActivityEvent, Long> {
+
+    void deleteByProject(Project project);
 
     List<ActivityEvent> findByUserIdAndTimestampBetween(Long userId, java.time.LocalDateTime startDate,
                                                          java.time.LocalDateTime endDate);

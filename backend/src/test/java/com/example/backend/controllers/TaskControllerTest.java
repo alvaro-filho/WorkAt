@@ -39,7 +39,7 @@ class TaskControllerTest {
         LocalValidatorFactoryBean validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = MockMvcBuilders.standaloneSetup(new TaskController(taskService, userRepository))
-                .setValidator(validator).build();
+                .setValidator(validator).setControllerAdvice(new ValidationExceptionHandler()).build();
     }
 
     @Test
@@ -86,5 +86,28 @@ class TaskControllerTest {
                 .andExpect(status().isBadRequest());
 
         verify(taskService, never()).createTask(any(), any(), any());
+    }
+
+    @Test
+    void deleteReturns204() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/v1/tasks/12")
+                        .principal(new UsernamePasswordAuthenticationToken("owner@example.test", null)))
+                .andExpect(status().isNoContent());
+
+        verify(taskService).deleteTask(12L, creator);
+    }
+
+    @Test
+    void deleteReturns409WhenProjectIsClosed() throws Exception {
+        doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                "Projeto encerrado. Retome o projeto para alterar tarefas."))
+                .when(taskService).deleteTask(12L, creator);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/v1/tasks/12")
+                        .principal(new UsernamePasswordAuthenticationToken("owner@example.test", null)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Projeto encerrado. Retome o projeto para alterar tarefas."));
     }
 }

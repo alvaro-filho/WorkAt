@@ -15,4 +15,6 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     List<Task> findByProjectOrderByCreatedAtAsc(Project project);
 
     Optional<Task> findByIdAndProject_CreatedByUser(Long id, User createdByUser);
+
+    void deleteByProject(Project project);
 }

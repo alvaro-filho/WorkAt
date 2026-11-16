@@ -2,6 +2,7 @@ package com.example.backend.services;
 
 import com.example.backend.dto.TaskCreateRequest;
 import com.example.backend.models.Project;
+import com.example.backend.models.ProjectStatus;
 import com.example.backend.models.Task;
 import com.example.backend.models.TaskStatus;
 import com.example.backend.models.User;
@@ -34,6 +35,7 @@ public class TaskService {
         }
         Project project = projectRepository.findByIdAndCreatedByUser(projectId, creator)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Projeto não encontrado."));
+        ensureProjectIsActive(project);
 
         Task task = new Task();
         task.setTitle(request.getTitle().trim());
@@ -59,7 +61,23 @@ public class TaskService {
         }
         Task task = taskRepository.findByIdAndProject_CreatedByUser(taskId, creator)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarefa não encontrada."));
+        ensureProjectIsActive(task.getProject());
         task.setStatus(status);
         return taskRepository.save(task);
+    }
+
+    @Transactional
+    public void deleteTask(Long taskId, User creator) {
+        Task task = taskRepository.findByIdAndProject_CreatedByUser(taskId, creator)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarefa não encontrada."));
+        ensureProjectIsActive(task.getProject());
+        taskRepository.delete(task);
+    }
+
+    private void ensureProjectIsActive(Project project) {
+        if (project.getStatus() == ProjectStatus.CLOSED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Projeto encerrado. Retome o projeto para alterar tarefas.");
+        }
     }
 }

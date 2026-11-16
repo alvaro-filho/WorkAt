@@ -25,6 +25,10 @@ public class Project {
     @Column(nullable = false)
     private ProjectCategory category = ProjectCategory.PESSOAL;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, columnDefinition = "varchar(20) default 'ACTIVE'")
+    private ProjectStatus status = ProjectStatus.ACTIVE;
+
     // Relacionamento opcional com o Criador do Projeto (usuário)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id", nullable = false)
@@ -77,6 +81,14 @@ public class Project {
 
     public void setCategory(ProjectCategory category) {
         this.category = category;
+    }
+
+    public ProjectStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(ProjectStatus status) {
+        this.status = status;
     }
 
     public User getCreatedByUser() {

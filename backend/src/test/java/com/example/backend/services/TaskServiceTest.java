@@ -2,6 +2,7 @@ package com.example.backend.services;
 
 import com.example.backend.dto.TaskCreateRequest;
 import com.example.backend.models.Project;
+import com.example.backend.models.ProjectStatus;
 import com.example.backend.models.Task;
 import com.example.backend.models.TaskPriority;
 import com.example.backend.models.TaskStatus;
@@ -68,6 +69,58 @@ class TaskServiceTest {
     }
 
     @Test
+    void deletesTaskForItsCreator() {
+        Task task = new Task();
+        task.setProject(project);
+        when(taskRepository.findByIdAndProject_CreatedByUser(22L, creator)).thenReturn(Optional.of(task));
+
+        taskService.deleteTask(22L, creator);
+
+        verify(taskRepository).delete(task);
+    }
+
+    @Test
+    void cannotDeleteTaskFromAnotherCreator() {
+        when(taskRepository.findByIdAndProject_CreatedByUser(22L, creator)).thenReturn(Optional.empty());
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> taskService.deleteTask(22L, creator));
+
+        assertEquals(404, exception.getStatusCode().value());
+        verify(taskRepository, never()).delete(any(Task.class));
+    }
+
+    @Test
+    void cannotDeleteTaskInClosedProject() {
+        project.setStatus(ProjectStatus.CLOSED);
+        Task task = new Task();
+        task.setProject(project);
+        when(taskRepository.findByIdAndProject_CreatedByUser(22L, creator)).thenReturn(Optional.of(task));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> taskService.deleteTask(22L, creator));
+
+        assertEquals(409, exception.getStatusCode().value());
+        assertEquals("Projeto encerrado. Retome o projeto para alterar tarefas.", exception.getReason());
+        verify(taskRepository, never()).delete(any(Task.class));
+    }
+
+    @Test
+    void cannotCreateTaskInClosedProject() {
+        project.setStatus(ProjectStatus.CLOSED);
+        when(projectRepository.findByIdAndCreatedByUser(15L, creator)).thenReturn(Optional.of(project));
+        TaskCreateRequest request = new TaskCreateRequest();
+        request.setTitle("Draft");
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> taskService.createTask(15L, creator, request));
+
+        assertEquals(409, exception.getStatusCode().value());
+        assertEquals("Projeto encerrado. Retome o projeto para alterar tarefas.", exception.getReason());
+        verify(taskRepository, never()).save(any(Task.class));
+    }
+
+    @Test
     void movesTaskStatusForItsCreator() {
         Task task = new Task();
         task.setProject(project);
@@ -90,6 +143,20 @@ class TaskServiceTest {
 
         assertEquals(404, exception.getStatusCode().value());
         verify(taskRepository, never()).save(any());
+    }
+
+    @Test
+    void cannotMoveTaskInClosedProject() {
+        project.setStatus(ProjectStatus.CLOSED);
+        Task task = new Task();
+        task.setProject(project);
+        when(taskRepository.findByIdAndProject_CreatedByUser(22L, creator)).thenReturn(Optional.of(task));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> taskService.updateStatus(22L, creator, TaskStatus.DONE));
+
+        assertEquals(409, exception.getStatusCode().value());
+        verify(taskRepository, never()).save(any(Task.class));
     }
 
     @Test

@@ -50,7 +50,9 @@ class ProjectCreateRequestTest {
         ProjectRepository projectRepository = mock(ProjectRepository.class);
         when(projectRepository.save(any(Project.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        ProjectService projectService = new ProjectService(projectRepository);
+        ProjectService projectService = new ProjectService(projectRepository,
+                mock(com.example.backend.repositories.TaskRepository.class),
+                mock(com.example.backend.repositories.ActivityEventRepository.class));
         ProjectController controller = new ProjectController(projectService, userRepository);
 
         var authentication = new UsernamePasswordAuthenticationToken(

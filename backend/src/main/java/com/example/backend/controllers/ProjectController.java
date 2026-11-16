@@ -1,6 +1,7 @@
 package com.example.backend.controllers;
 
 import com.example.backend.models.Project;
+import com.example.backend.dto.ProjectStatusUpdateRequest;
 import com.example.backend.dto.ProjectCreateRequest;
 import com.example.backend.services.ProjectService;
 import com.example.backend.repositories.UserRepository;
@@ -74,6 +75,21 @@ public class ProjectController {
         User creator = findAuthenticatedUser(authentication);
         Project newProject = projectService.createProject(projectDetails.toNewProject(), creator);
         return ResponseEntity.status(201).body(newProject);
+    }
+
+    @PatchMapping("/{projectId}/status")
+    public ResponseEntity<Project> updateProjectStatus(@PathVariable Long projectId,
+                                                        @RequestBody ProjectStatusUpdateRequest request,
+                                                        Authentication authentication) {
+        User creator = findAuthenticatedUser(authentication);
+        return ResponseEntity.ok(projectService.updateStatus(projectId, creator, request.getStatus()));
+    }
+
+    @DeleteMapping("/{projectId}")
+    public ResponseEntity<Void> deleteProject(@PathVariable Long projectId, Authentication authentication) {
+        User creator = findAuthenticatedUser(authentication);
+        projectService.deleteProject(projectId, creator);
+        return ResponseEntity.noContent().build();
     }
 
     private User findAuthenticatedUser(Authentication authentication) {
