@@ -44,7 +44,7 @@ public class SecurityConfig {
                             "http://127.0.0.1:[*]"
                         ));
                     // Permite todos os métodos e headers
-                    configuration.setAllowedMethods(java.util.Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+                    configuration.setAllowedMethods(java.util.Arrays.asList("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
                     configuration.setAllowedHeaders(java.util.Arrays.asList("*"));
                     configuration.setAllowCredentials(true);
                     return configuration;

@@ -1,5 +1,12 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, KanbanSquare, Frame, GalleryVerticalEnd, Palette, LogOut } from "lucide-react";
+import {
+  LayoutDashboard,
+  KanbanSquare,
+  Frame,
+  GalleryVerticalEnd,
+  Palette,
+  LogOut,
+} from "lucide-react";
 
 import {
   Sidebar,
@@ -26,7 +33,7 @@ const items = [
 
 export function AppSidebar() {
   const { state } = useSidebar();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
@@ -75,12 +82,23 @@ export function AppSidebar() {
       <SidebarFooter className="gap-2 p-3">
         <div className="glass flex items-center gap-3 rounded-xl p-2">
           <Avatar className="size-8">
-            <AvatarFallback className="bg-primary/20 text-xs text-foreground">MR</AvatarFallback>
+            <AvatarFallback className="bg-primary/20 text-xs text-foreground">
+              {(user?.fullName ?? user?.username ?? "?")
+                .split(/\s+/)
+                .map((part) => part[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase()}
+            </AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="min-w-0 flex-1 leading-tight">
-              <p className="truncate text-sm font-medium">Marina Rocha</p>
-              <p className="truncate text-xs text-muted-foreground">Artista / Freelancer</p>
+              <p className="truncate text-sm font-medium">
+                {user?.fullName ?? user?.username ?? "Usuário"}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {user?.role === "COMPANY" ? "Empresa / Estúdio" : "Artista / Freelancer"}
+              </p>
             </div>
           )}
           {!collapsed && (

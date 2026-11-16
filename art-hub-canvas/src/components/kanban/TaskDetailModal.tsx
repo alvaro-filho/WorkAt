@@ -1,62 +1,58 @@
-import { Link } from "@tanstack/react-router";
-import { CalendarClock, Flag, Layers, User } from "lucide-react";
+import { CalendarClock, Flag } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Progress } from "@/components/ui/progress";
-import type { Task } from "@/lib/atelie-data";
+import type { ApiTask } from "@/lib/api";
+
+const priorityLabel = { LOW: "Baixa", MEDIUM: "Média", HIGH: "Alta" } as const;
+const statusLabel = {
+  TODO: "A Fazer",
+  IN_PROGRESS: "Em Progresso",
+  REVIEW: "Em Revisão",
+  DONE: "Concluído",
+} as const;
 
 export function TaskDetailModal({
   task,
   onOpenChange,
 }: {
-  task: Task | null;
+  task: ApiTask | null;
   onOpenChange: (v: boolean) => void;
 }) {
+  const deadline = task?.deadline
+    ? new Date(`${task.deadline}T00:00:00`).toLocaleDateString("pt-BR")
+    : "Sem prazo";
+
   return (
     <Dialog open={!!task} onOpenChange={onOpenChange}>
       <DialogContent className="glass sm:max-w-xl">
         {task && (
           <>
-            <div className="h-28 rounded-xl" style={{ backgroundImage: task.cover }} />
             <DialogHeader>
               <DialogTitle>{task.title}</DialogTitle>
-              <DialogDescription>{task.description}</DialogDescription>
+              <DialogDescription>{task.description || "Sem descrição."}</DialogDescription>
             </DialogHeader>
-
             <div className="grid gap-3 sm:grid-cols-2">
-              <Info icon={User} label="Contratante" value={task.client} />
-              <Info icon={Layers} label="Entregável" value={task.deliverable} />
-              <Info icon={CalendarClock} label="Prazo" value={task.deadline} />
-              <Info icon={Flag} label="Prioridade" value={task.priority} />
-            </div>
-
-            <div>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Progresso</span>
-                <span>{task.progress}%</span>
+              <Info icon={CalendarClock} label="Prazo" value={deadline} />
+              <Info icon={Flag} label="Prioridade" value={priorityLabel[task.priority]} />
+              <div className="glass rounded-xl p-3">
+                <p className="text-xs text-muted-foreground">Status</p>
+                <p className="mt-1 text-sm font-medium">{statusLabel[task.status]}</p>
               </div>
-              <Progress value={task.progress} className="mt-2 h-2" />
+              <div className="glass rounded-xl p-3">
+                <p className="text-xs text-muted-foreground">Projeto</p>
+                <p className="mt-1 text-sm font-medium">#{task.projectId}</p>
+              </div>
             </div>
-
-            <DialogFooter className="sm:justify-between">
-              <Badge variant="outline" className="border-neon/50 text-neon">
-                Sincronizado com o canvas
-              </Badge>
-              <Button asChild className="gradient-primary text-primary-foreground">
-                <Link to="/canvas" search={{ task: task.id }}>
-                  Abrir Canvas da Tarefa
-                </Link>
-              </Button>
-            </DialogFooter>
+            <Badge variant="outline" className="w-fit">
+              Tarefa sincronizada com o servidor
+            </Badge>
           </>
         )}
       </DialogContent>
@@ -64,15 +60,7 @@ export function TaskDetailModal({
   );
 }
 
-function Info({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof User;
-  label: string;
-  value: string;
-}) {
+function Info({ icon: Icon, label, value }: { icon: typeof Flag; label: string; value: string }) {
   return (
     <div className="glass rounded-xl p-3">
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
