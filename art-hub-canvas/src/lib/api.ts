@@ -19,6 +19,7 @@ export interface Project {
   slug: string;
   description: string | null;
   category: "EMPRESA" | "ESTUDIO" | "PESSOAL";
+  status: "ACTIVE" | "CLOSED";
 }
 
 export type ApiTaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE";
@@ -155,7 +156,7 @@ export const api = {
       { authFailure: "ignore" },
     ),
   projects: () => request<Project[]>("/projects"),
-  createProject: (payload: Omit<Project, "id">) =>
+  createProject: (payload: Omit<Project, "id" | "status">) =>
     request<Project>(
       "/projects",
       { method: "POST", body: JSON.stringify(payload) },
@@ -175,4 +176,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
+  deleteTask: (taskId: number) => request<void>(`/tasks/${taskId}`, { method: "DELETE" }),
+  updateProjectStatus: (projectId: number, status: Project["status"]) =>
+    request<Project>(`/projects/${projectId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  deleteProject: (projectId: number) => request<void>(`/projects/${projectId}`, { method: "DELETE" }),
 };

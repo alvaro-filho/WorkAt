@@ -7,6 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ApiError,
   type ApiPriority,
   type ApiTask,
@@ -53,6 +63,9 @@ export function KanbanBoard({
   onCreateTask,
   onMoveTask,
   onOpenTask,
+  onUpdateProjectStatus,
+  onDeleteProject,
+  projectActionLoading,
 }: {
   projects: Project[];
   selectedProjectId: number | null;
@@ -73,6 +86,9 @@ export function KanbanBoard({
   }) => Promise<void>;
   onMoveTask: (taskId: number, status: ApiTaskStatus) => Promise<ApiTask>;
   onOpenTask: (task: ApiTask) => void;
+  onUpdateProjectStatus: (status: Project["status"]) => Promise<void>;
+  onDeleteProject: () => Promise<void>;
+  projectActionLoading: boolean;
 }) {
   const [localTasks, setLocalTasks] = useState(tasks);
   const [dragging, setDragging] = useState<number | null>(null);
@@ -88,10 +104,15 @@ export function KanbanBoard({
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<ApiPriority>("MEDIUM");
   const [deadline, setDeadline] = useState("");
+  const [projectConfirmation, setProjectConfirmation] = useState<"close" | "delete" | null>(null);
+  const [projectActionError, setProjectActionError] = useState<string | null>(null);
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const projectClosed = selectedProject?.status === "CLOSED";
 
   useEffect(() => setLocalTasks(tasks), [tasks]);
 
   const move = async (id: number, status: TaskStatus) => {
+    if (projectClosed) return;
     const task = localTasks.find((item) => item.id === id);
     if (!task || toUiStatus[task.status] === status) return;
     const previous = localTasks;
@@ -136,6 +157,7 @@ export function KanbanBoard({
 
   const submitTask = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (projectClosed) return;
     setBusy(true);
     setFormError(null);
     try {
@@ -149,6 +171,27 @@ export function KanbanBoard({
       setFormError(e instanceof Error ? e.message : "Não foi possível criar a tarefa.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const confirmProjectAction = async () => {
+    if (!projectConfirmation) return;
+    setProjectActionError(null);
+    try {
+      if (projectConfirmation === "close") await onUpdateProjectStatus("CLOSED");
+      else await onDeleteProject();
+      setProjectConfirmation(null);
+    } catch (e) {
+      setProjectActionError(e instanceof Error ? e.message : "Não foi possível concluir a ação.");
+    }
+  };
+
+  const resumeProject = async () => {
+    setProjectActionError(null);
+    try {
+      await onUpdateProjectStatus("ACTIVE");
+    } catch (e) {
+      setProjectActionError(e instanceof Error ? e.message : "Não foi possível retomar o projeto.");
     }
   };
 
@@ -167,7 +210,7 @@ export function KanbanBoard({
             {!projects.length && <option value="">Nenhum projeto</option>}
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
-                {project.name}
+                {project.name}{project.status === "CLOSED" ? " (encerrado)" : ""}
               </option>
             ))}
           </select>
@@ -183,10 +226,40 @@ export function KanbanBoard({
         >
           <Plus className="size-4" /> Novo projeto
         </Button>
+        {selectedProject && !projectClosed && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={projectActionLoading}
+            onClick={() => setProjectConfirmation("close")}
+          >
+            Encerrar projeto
+          </Button>
+        )}
+        {selectedProject && projectClosed && (
+          <>
+            <Button type="button" variant="outline" disabled={projectActionLoading} onClick={() => void resumeProject()}>
+              {projectActionLoading ? "Retomando..." : "Retomar projeto"}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={projectActionLoading}
+              onClick={() => setProjectConfirmation("delete")}
+            >
+              Apagar projeto
+            </Button>
+          </>
+        )}
+        {projectClosed && (
+          <div role="status" className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            Projeto encerrado. Retome para alterar tarefas.
+          </div>
+        )}
         <Button
           type="button"
           className="gradient-primary text-primary-foreground"
-          disabled={!selectedProjectId}
+          disabled={!selectedProjectId || projectClosed || projectActionLoading}
           onClick={() => {
             setTaskForm((v) => !v);
             setProjectForm(false);
@@ -235,7 +308,7 @@ export function KanbanBoard({
             </Button>
           </form>
         )}
-        {taskForm && (
+        {taskForm && !projectClosed && (
           <form
             onSubmit={submitTask}
             className="grid w-full gap-3 border-t border-border pt-4 sm:grid-cols-2"
@@ -289,6 +362,9 @@ export function KanbanBoard({
             {formError}
           </p>
         )}
+        {projectActionError && (
+          <p role="alert" className="w-full text-sm text-destructive">{projectActionError}</p>
+        )}
       </div>
 
       {!projects.length && !loading && (
@@ -320,11 +396,13 @@ export function KanbanBoard({
               <section
                 key={col.id}
                 onDragOver={(e) => {
+                  if (projectClosed) return;
                   e.preventDefault();
                   setOverColumn(col.id);
                 }}
                 onDragLeave={() => setOverColumn((c) => (c === col.id ? null : c))}
                 onDrop={() => {
+                  if (projectClosed) return;
                   if (dragging !== null) void move(dragging, col.id);
                   setDragging(null);
                   setOverColumn(null);
@@ -341,8 +419,8 @@ export function KanbanBoard({
                   {items.map((task) => (
                     <article
                       key={task.id}
-                      draggable
-                      onDragStart={() => setDragging(task.id)}
+                      draggable={!projectClosed}
+                      onDragStart={() => !projectClosed && setDragging(task.id)}
                       onDragEnd={() => setDragging(null)}
                       onClick={() => onOpenTask(task)}
                       className={`glass glass-hover cursor-pointer rounded-xl p-3 ${dragging === task.id ? "opacity-50" : ""}`}
@@ -382,6 +460,49 @@ export function KanbanBoard({
           })}
         </div>
       )}
+      <AlertDialog
+        open={projectConfirmation !== null}
+        onOpenChange={(open) => {
+          if (!open && !projectActionLoading) setProjectConfirmation(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {projectConfirmation === "delete" ? "Apagar projeto?" : "Encerrar projeto?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {projectConfirmation === "delete"
+                ? "Esta ação é permanente e apagará todas as tarefas deste projeto."
+                : "O projeto passará a ser somente leitura. Você poderá retomá-lo depois."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {projectActionError && (
+            <p role="alert" className="text-sm text-destructive">{projectActionError}</p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={projectActionLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={projectActionLoading}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmProjectAction();
+              }}
+              className={
+                projectConfirmation === "delete"
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : ""
+              }
+            >
+              {projectActionLoading
+                ? "Aguarde..."
+                : projectConfirmation === "delete"
+                  ? "Apagar permanentemente"
+                  : "Encerrar projeto"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

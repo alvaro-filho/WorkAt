@@ -1,6 +1,19 @@
+import { useState } from "react";
 import { CalendarClock, Flag } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -21,10 +34,16 @@ const statusLabel = {
 export function TaskDetailModal({
   task,
   onOpenChange,
+  readOnly = false,
+  onDeleteTask,
 }: {
   task: ApiTask | null;
   onOpenChange: (v: boolean) => void;
+  readOnly?: boolean;
+  onDeleteTask: (taskId: number) => Promise<void>;
 }) {
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const deadline = task?.deadline
     ? new Date(`${task.deadline}T00:00:00`).toLocaleDateString("pt-BR")
     : "Sem prazo";
@@ -53,6 +72,48 @@ export function TaskDetailModal({
             <Badge variant="outline" className="w-fit">
               Tarefa sincronizada com o servidor
             </Badge>
+            <div className="space-y-2">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button type="button" variant="destructive" disabled={deleting || readOnly}>
+                    Apagar tarefa
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Apagar tarefa?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Esta ação apagará permanentemente esta tarefa.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  {deleteError && <p role="alert" className="text-sm text-destructive">{deleteError}</p>}
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={deleting}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        if (!task) return;
+                        setDeleting(true);
+                        setDeleteError(null);
+                        void onDeleteTask(task.id)
+                          .then(() => onOpenChange(false))
+                          .catch((error: unknown) => {
+                            setDeleteError(
+                              error instanceof Error
+                                ? error.message
+                                : "Não foi possível apagar a tarefa.",
+                            );
+                          })
+                          .finally(() => setDeleting(false));
+                      }}
+                    >
+                      {deleting ? "Apagando..." : "Apagar tarefa"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </>
         )}
       </DialogContent>

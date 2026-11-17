@@ -32,6 +32,7 @@ function KanbanPage() {
   const [selectedTask, setSelectedTask] = useState<ApiTask | null>(null);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [projectActionLoading, setProjectActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -101,6 +102,46 @@ function KanbanPage() {
     return updated;
   };
 
+  const updateProjectStatus = async (status: Project["status"]) => {
+    if (selectedProjectId === null) return;
+    setProjectActionLoading(true);
+    setError(null);
+    try {
+      const updated = await api.updateProjectStatus(selectedProjectId, status);
+      setProjects((items) => items.map((project) => (project.id === updated.id ? updated : project)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível atualizar o projeto.");
+      throw e;
+    } finally {
+      setProjectActionLoading(false);
+    }
+  };
+
+  const deleteProject = async () => {
+    if (selectedProjectId === null) return;
+    setProjectActionLoading(true);
+    setError(null);
+    try {
+      await api.deleteProject(selectedProjectId);
+      const remaining = projects.filter((project) => project.id !== selectedProjectId);
+      setProjects(remaining);
+      setSelectedProjectId(remaining[0]?.id ?? null);
+      setTasks([]);
+      setSelectedTask(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível apagar o projeto.");
+      throw e;
+    } finally {
+      setProjectActionLoading(false);
+    }
+  };
+
+  const deleteTask = async (taskId: number) => {
+    await api.deleteTask(taskId);
+    setTasks((items) => items.filter((task) => task.id !== taskId));
+    setSelectedTask((task) => (task?.id === taskId ? null : task));
+  };
+
   const loading = projectsLoading || tasksLoading;
 
   return (
@@ -116,7 +157,10 @@ function KanbanPage() {
           <KanbanBoard
             projects={projects}
             selectedProjectId={selectedProjectId}
-            onSelectProject={setSelectedProjectId}
+            onSelectProject={(projectId) => {
+              setSelectedProjectId(projectId);
+              setSelectedTask(null);
+            }}
             tasks={tasks}
             loading={loading}
             error={error}
@@ -124,6 +168,9 @@ function KanbanPage() {
             onCreateTask={createTask}
             onMoveTask={moveTask}
             onOpenTask={setSelectedTask}
+            onUpdateProjectStatus={updateProjectStatus}
+            onDeleteProject={deleteProject}
+            projectActionLoading={projectActionLoading}
           />
         ) : (
           <GanttView tasks={tasks} />
@@ -131,6 +178,8 @@ function KanbanPage() {
       </div>
       <TaskDetailModal
         task={selectedTask}
+        readOnly={projects.find((project) => project.id === selectedProjectId)?.status === "CLOSED"}
+        onDeleteTask={deleteTask}
         onOpenChange={(open) => !open && setSelectedTask(null)}
       />
     </AppLayout>
