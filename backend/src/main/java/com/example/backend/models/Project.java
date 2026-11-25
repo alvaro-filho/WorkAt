@@ -34,6 +34,10 @@ public class Project {
     @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean contractorsSeeAllTasks = false;
 
+    // Só vale no corporativo: com NDA ligado, as artes enviadas à vitrine nascem travadas e só o dono libera.
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean ndaEnabled = false;
+
     // Relacionamento opcional com o Criador do Projeto (usuário)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id", nullable = false)
@@ -102,6 +106,14 @@ public class Project {
 
     public void setContractorsSeeAllTasks(boolean contractorsSeeAllTasks) {
         this.contractorsSeeAllTasks = contractorsSeeAllTasks;
+    }
+
+    public boolean isNdaEnabled() {
+        return ndaEnabled;
+    }
+
+    public void setNdaEnabled(boolean ndaEnabled) {
+        this.ndaEnabled = ndaEnabled;
     }
 
     public User getCreatedByUser() {

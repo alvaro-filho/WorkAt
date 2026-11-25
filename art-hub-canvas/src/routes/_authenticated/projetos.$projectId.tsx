@@ -4,6 +4,7 @@ import { ArrowLeft, LogOut, Mail, UserMinus } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { GanttView } from "@/components/kanban/GanttView";
+import { ArtImage, ArtStatusBadge, ReviewDialog } from "@/components/art/ArtPieces";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import {
   AlertDialog,
@@ -30,7 +31,9 @@ import {
   type Project,
   type ProjectInvitation,
   type ProjectMember,
+  type ShowcaseArt,
 } from "@/lib/api";
+import { logStatusActivity } from "@/lib/activity-api";
 import { useAuth } from "@/lib/AuthContext";
 import {
   canWorkOnTask,
@@ -136,6 +139,7 @@ function ProjectPage() {
 
   const moveTask = async (taskId: number, status: ApiTaskStatus) => {
     const updated = await api.updateTaskStatus(taskId, status);
+    logStatusActivity(status, project.id);
     setTasks((items) => items.map((task) => (task.id === taskId ? updated : task)));
     return updated;
   };
@@ -196,6 +200,7 @@ function ProjectPage() {
           <TabsTrigger value="quadro">Quadro</TabsTrigger>
           <TabsTrigger value="cronograma">Cronograma</TabsTrigger>
           {permissions.hasMembers && <TabsTrigger value="membros">Membros</TabsTrigger>}
+          <TabsTrigger value="vitrine">Vitrine</TabsTrigger>
           {permissions.owner && <TabsTrigger value="config">Configurações</TabsTrigger>}
         </TabsList>
 
@@ -235,6 +240,10 @@ function ProjectPage() {
             <MembersTab project={project} />
           </TabsContent>
         )}
+
+        <TabsContent value="vitrine" className="mt-4">
+          <ShowcaseTab project={project} />
+        </TabsContent>
 
         {permissions.owner && (
           <TabsContent value="config" className="mt-4">
@@ -500,13 +509,14 @@ function SettingsTab({
     }
   };
 
-  const toggleVisibility = async (checked: boolean) => {
+  const saveSetting = async (payload: {
+    contractorsSeeAllTasks?: boolean;
+    ndaEnabled?: boolean;
+  }) => {
     setBusy(true);
     setError(null);
     try {
-      onProjectChange(
-        await api.updateProjectSettings(project.id, { contractorsSeeAllTasks: checked }),
-      );
+      onProjectChange(await api.updateProjectSettings(project.id, payload));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível salvar a configuração.");
     } finally {
@@ -569,7 +579,27 @@ function SettingsTab({
             id="contractorsSeeAll"
             checked={project.contractorsSeeAllTasks}
             disabled={busy}
-            onCheckedChange={(checked) => void toggleVisibility(checked)}
+            onCheckedChange={(checked) => void saveSetting({ contractorsSeeAllTasks: checked })}
+          />
+        </div>
+      )}
+      {project.type === "CORPORATE" && (
+        <div className="flex items-start justify-between gap-4 border-t border-border pt-4">
+          <div>
+            <Label htmlFor="ndaEnabled" className="text-sm font-semibold">
+              Projeto sob NDA
+            </Label>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ligado: as artes enviadas à vitrine ficam travadas até você liberar na aba Vitrine, e
+              o projeto aparece mascarado no perfil dos contratados. Desligado: as artes são
+              publicadas direto.
+            </p>
+          </div>
+          <Switch
+            id="ndaEnabled"
+            checked={project.ndaEnabled}
+            disabled={busy}
+            onCheckedChange={(checked) => void saveSetting({ ndaEnabled: checked })}
           />
         </div>
       )}
@@ -618,6 +648,119 @@ function SettingsTab({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+/**
+ * Artes do projeto na vitrine. O dono do projeto (parte contratante) libera ou recusa as travadas por NDA;
+ * os membros acompanham a situação das suas.
+ */
+function ShowcaseTab({ project }: { project: Project }) {
+  const owner = project.myRole === "OWNER";
+  const [arts, setArts] = useState<ShowcaseArt[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [review, setReview] = useState<{ art: ShowcaseArt; mode: "approve" | "reject" } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    api
+      .projectShowcase(project.id)
+      .then(setArts)
+      .catch((e: unknown) =>
+        setError(
+          e instanceof Error ? e.message : "Não foi possível carregar a vitrine do projeto.",
+        ),
+      );
+  }, [project.id]);
+
+  const pending = (arts ?? []).filter(
+    (art) => art.ndaStatus === "LOCKED_BY_NDA" && !art.reviewNote,
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="glass rounded-2xl p-4 text-sm text-muted-foreground">
+        {project.type === "CORPORATE" && project.ndaEnabled
+          ? owner
+            ? `Projeto sob NDA: as artes enviadas pelos contratados esperam a sua liberação. ${pending.length} aguardando.`
+            : "Projeto sob NDA: suas artes só aparecem no seu portfólio depois que o contratante liberar."
+          : "Sem NDA: as artes enviadas a partir da imagem final das tarefas são publicadas direto no portfólio."}
+      </div>
+      {error && (
+        <div role="alert" className="glass rounded-2xl p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+      {arts === null && !error ? (
+        <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
+          Carregando...
+        </div>
+      ) : arts && arts.length === 0 ? (
+        <div className="glass rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          Nenhuma arte enviada ainda. Na tela da tarefa, marque a imagem final e use “Enviar para a
+          vitrine”.
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {(arts ?? []).map((art) => (
+            <article key={art.id} className="glass overflow-hidden rounded-2xl">
+              <ArtImage src={art.imageUrl} title={art.title} />
+              <div className="space-y-2 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="min-w-0 truncate font-medium">{art.title}</h3>
+                  <ArtStatusBadge art={art} />
+                </div>
+                <p className="text-xs text-muted-foreground">Por {art.artistName}</p>
+                {art.reviewNote && (
+                  <p className="rounded-md bg-destructive/10 p-2 text-xs">
+                    Motivo: {art.reviewNote}
+                  </p>
+                )}
+                {art.taskId && (
+                  <Link
+                    to="/projetos/$projectId/tarefas/$taskId"
+                    params={{ projectId: String(project.id), taskId: String(art.taskId) }}
+                    className="inline-block text-xs text-primary hover:underline"
+                  >
+                    Abrir tarefa
+                  </Link>
+                )}
+                {owner && art.ndaStatus === "LOCKED_BY_NDA" && project.status === "ACTIVE" && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      className="gradient-primary text-primary-foreground"
+                      onClick={() => setReview({ art, mode: "approve" })}
+                    >
+                      Liberar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setReview({ art, mode: "reject" })}
+                    >
+                      Recusar
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+      <ReviewDialog
+        art={review?.art ?? null}
+        mode={review?.mode ?? "approve"}
+        onClose={() => setReview(null)}
+        onSaved={(updated) => {
+          setArts((items) =>
+            (items ?? []).map((item) => (item.id === updated.id ? updated : item)),
+          );
+          setReview(null);
+        }}
+      />
     </div>
   );
 }

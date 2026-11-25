@@ -20,7 +20,8 @@ public record ProjectResponse(
         ProjectStatus status,
         ProjectRole myRole,
         UserSummary owner,
-        boolean contractorsSeeAllTasks
+        boolean contractorsSeeAllTasks,
+        boolean ndaEnabled
 ) {
     public static ProjectResponse from(Project project, User viewer) {
         ProjectRole role = ProjectAccessService.isOwner(project, viewer) ? ProjectRole.OWNER : ProjectRole.MEMBER;
@@ -33,7 +34,8 @@ public record ProjectResponse(
                 project.getStatus(),
                 role,
                 UserSummary.from(project.getCreatedByUser()),
-                project.isContractorsSeeAllTasks()
+                project.isContractorsSeeAllTasks(),
+                project.isNdaEnabled()
         );
     }
 }

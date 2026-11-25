@@ -32,6 +32,15 @@ public class ShowcaseArt {
     @JoinColumn(name = "project_id")
     private Project project;
 
+    // Tarefa e imagem final de onde a arte saiu (fluxo novo: "Enviar para a vitrine" na tarefa).
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "task_id")
+    private Task task;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_file_id")
+    private TaskFile sourceFile;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private NdaStatus ndaStatus = NdaStatus.LOCKED_BY_NDA;
@@ -40,6 +49,9 @@ public class ShowcaseArt {
     private String reviewNote;
 
     private LocalDate releaseDate;
+
+    /** Quando a arte foi liberada (aprovada). Usado para ordenar o feed do Explorar. */
+    private LocalDateTime approvedAt;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -71,6 +83,10 @@ public class ShowcaseArt {
     public void setArtist(User artist) { this.artist = artist; }
     public User getCompany() { return company; }
     public void setCompany(User company) { this.company = company; }
+    public Task getTask() { return task; }
+    public void setTask(Task task) { this.task = task; }
+    public TaskFile getSourceFile() { return sourceFile; }
+    public void setSourceFile(TaskFile sourceFile) { this.sourceFile = sourceFile; }
     public Project getProject() { return project; }
     public void setProject(Project project) { this.project = project; }
     public NdaStatus getNdaStatus() { return ndaStatus; }
@@ -79,6 +95,21 @@ public class ShowcaseArt {
     public void setReviewNote(String reviewNote) { this.reviewNote = reviewNote; }
     public LocalDate getReleaseDate() { return releaseDate; }
     public void setReleaseDate(LocalDate releaseDate) { this.releaseDate = releaseDate; }
+    public LocalDateTime getApprovedAt() { return approvedAt; }
+    public void setApprovedAt(LocalDateTime approvedAt) { this.approvedAt = approvedAt; }
+
+    /**
+     * Momento em que a arte ficou pública: a liberação ou, se houver data de lançamento posterior, o início dela.
+     * Artes antigas (sem approvedAt) usam a última atualização.
+     */
+    public LocalDateTime getPublishedAt() {
+        LocalDateTime approved = approvedAt != null ? approvedAt : updatedAt;
+        if (releaseDate != null && approved != null && releaseDate.atStartOfDay().isAfter(approved)) {
+            return releaseDate.atStartOfDay();
+        }
+        return approved;
+    }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

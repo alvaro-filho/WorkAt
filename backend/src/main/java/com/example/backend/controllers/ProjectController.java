@@ -76,7 +76,8 @@ public class ProjectController {
                                                           Authentication authentication) {
         User user = findAuthenticatedUser(authentication);
         return ResponseEntity.ok(ProjectResponse.from(
-                projectService.updateSettings(projectId, user, request.getContractorsSeeAllTasks()), user));
+                projectService.updateSettings(projectId, user, request.getContractorsSeeAllTasks(), request.getNdaEnabled()),
+                user));
     }
 
     @DeleteMapping("/{projectId}")

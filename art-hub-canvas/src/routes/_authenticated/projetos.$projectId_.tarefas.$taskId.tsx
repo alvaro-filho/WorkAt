@@ -12,6 +12,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 
+import { ArtStatusBadge } from "@/components/art/ArtPieces";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
   AlertDialog,
@@ -26,8 +27,18 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import {
   api,
   ApiError,
@@ -37,8 +48,10 @@ import {
   type ApiTaskStatus,
   type Project,
   type ProjectMember,
+  type ShowcaseArt,
   type TaskFile,
 } from "@/lib/api";
+import { logActivity, logStatusActivity } from "@/lib/activity-api";
 import { useAuth } from "@/lib/AuthContext";
 import { canWorkOnTask, projectPermissions } from "@/lib/project-labels";
 
@@ -86,6 +99,7 @@ function TaskPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showcaseArt, setShowcaseArt] = useState<ShowcaseArt | null>(null);
 
   const loadFiles = useCallback(async () => {
     setFiles(await api.taskFiles(taskId));
@@ -108,6 +122,10 @@ function TaskPage() {
         setProject(loadedProject);
         setTask(loadedTask);
         setFiles(loadedFiles);
+        api
+          .taskShowcase(taskId)
+          .then((art) => active && setShowcaseArt(art ?? null))
+          .catch(() => undefined);
         if (loadedProject.type !== "PERSONAL") {
           api
             .members(projectId)
@@ -169,6 +187,7 @@ function TaskPage() {
     setError(null);
     try {
       setTask(await api.updateTaskStatus(task.id, status));
+      logStatusActivity(status, project.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível mudar o status.");
     }
@@ -243,6 +262,7 @@ function TaskPage() {
               (permissions.owner || String(file.uploadedBy.id) === String(user?.id))
             }
             onChanged={loadFiles}
+            onUploaded={() => logActivity("FILE_UPLOAD", project.id)}
             onError={setError}
           />
         </div>
@@ -259,6 +279,15 @@ function TaskPage() {
               </Link>
             </Button>
           </section>
+
+          <ShowcaseCard
+            project={project}
+            task={task}
+            finalImage={finalImage}
+            canSubmit={canWork}
+            art={showcaseArt}
+            onSubmitted={setShowcaseArt}
+          />
 
           <section className="glass space-y-4 rounded-2xl p-4">
             <div className="space-y-2">
@@ -399,6 +428,7 @@ function DeliveriesSection({
   canUpload,
   canDelete,
   onChanged,
+  onUploaded,
   onError,
 }: {
   taskId: number;
@@ -406,6 +436,7 @@ function DeliveriesSection({
   canUpload: boolean;
   canDelete: (file: TaskFile) => boolean;
   onChanged: () => Promise<void>;
+  onUploaded: () => void;
   onError: (message: string | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -420,6 +451,7 @@ function DeliveriesSection({
     setProgress(0);
     try {
       await uploadTaskFile(taskId, file, { markAsFinal, onProgress: setProgress });
+      onUploaded();
       setMarkAsFinal(false);
       await onChanged();
     } catch (e) {
@@ -605,6 +637,146 @@ function DeliveriesSection({
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** Envio da imagem final para a vitrine (portfólio) e a situação da arte. */
+function ShowcaseCard({
+  project,
+  task,
+  finalImage,
+  canSubmit,
+  art,
+  onSubmitted,
+}: {
+  project: Project;
+  task: ApiTask;
+  finalImage: TaskFile | null;
+  canSubmit: boolean;
+  art: ShowcaseArt | null;
+  onSubmitted: (art: ShowcaseArt) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const nda = project.type === "CORPORATE" && project.ndaEnabled;
+  const alreadyPublishedThisImage =
+    art !== null &&
+    art.ndaStatus === "APPROVED_FOR_RELEASE" &&
+    !art.reviewNote &&
+    finalImage !== null;
+
+  const openDialog = () => {
+    setTitle(art?.title ?? task.title);
+    setDescription(art?.description ?? "");
+    setError(null);
+    setOpen(true);
+  };
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      onSubmitted(
+        await api.submitToShowcase(task.id, {
+          title: title.trim(),
+          ...(description.trim() ? { description: description.trim() } : {}),
+        }),
+      );
+      setOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível enviar para a vitrine.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="glass space-y-3 rounded-2xl p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Vitrine</h3>
+        {art && <ArtStatusBadge art={art} />}
+      </div>
+      {art?.reviewNote && (
+        <p className="rounded-md bg-destructive/10 p-2 text-xs">
+          O contratante recusou: {art.reviewNote}
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground">
+        {!finalImage
+          ? "Marque uma imagem final nas entregas para poder enviar ao portfólio."
+          : nda
+            ? "Projeto sob NDA: a arte fica travada até o contratante liberar."
+            : "A imagem final vai direto para o portfólio de quem enviou."}
+      </p>
+      {canSubmit && finalImage && (
+        <Button variant="outline" className="w-full" onClick={openDialog}>
+          {art
+            ? alreadyPublishedThisImage
+              ? "Atualizar na vitrine"
+              : "Reenviar para a vitrine"
+            : "Enviar para a vitrine"}
+        </Button>
+      )}
+
+      <Dialog open={open} onOpenChange={(value) => !busy && setOpen(value)}>
+        <DialogContent className="border-border bg-card">
+          <form onSubmit={submit} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Enviar para a vitrine</DialogTitle>
+              <DialogDescription>
+                A imagem final ({finalImage?.originalName}) vai para o seu portfólio
+                {nda ? " depois que o contratante liberar." : "."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="artTitle">Título</Label>
+              <Input
+                id="artTitle"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={150}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="artDescription">Descrição</Label>
+              <Textarea
+                id="artDescription"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Opcional"
+              />
+            </div>
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+                disabled={busy}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={busy || !title.trim()}
+                className="gradient-primary text-primary-foreground"
+              >
+                {busy ? "Enviando..." : "Enviar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

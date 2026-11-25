@@ -100,6 +100,7 @@ public class ShowcaseService {
             art.setNdaStatus(status);
             art.setReleaseDate(request.getReleaseDate());
             art.setReviewNote(null);
+            art.setApprovedAt(java.time.LocalDateTime.now());
         } else {
             if (request.getNote() == null || request.getNote().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -108,12 +109,17 @@ public class ShowcaseService {
             art.setNdaStatus(status);
             art.setReleaseDate(null);
             art.setReviewNote(request.getNote().trim());
+            art.setApprovedAt(null);
         }
         return showcaseArtRepository.save(art);
     }
 
     @Transactional(readOnly = true)
     public List<ShowcaseArt> publicArts() {
-        return showcaseArtRepository.findPublicArts(NdaStatus.APPROVED_FOR_RELEASE, LocalDate.now());
+        // Feed do Explorar: mais recente primeiro, pela hora em que a arte ficou pública.
+        return showcaseArtRepository.findPublicArts(NdaStatus.APPROVED_FOR_RELEASE, LocalDate.now()).stream()
+                .sorted(java.util.Comparator.comparing(ShowcaseArt::getPublishedAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+                .toList();
     }
 }

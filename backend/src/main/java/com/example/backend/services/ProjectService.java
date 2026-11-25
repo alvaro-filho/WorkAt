@@ -97,14 +97,17 @@ public class ProjectService {
 
     /** Configurações do dono. Hoje: no corporativo, se os contratados veem todas as tarefas. */
     @Transactional
-    public Project updateSettings(Long projectId, User user, Boolean contractorsSeeAllTasks) {
+    public Project updateSettings(Long projectId, User user, Boolean contractorsSeeAllTasks, Boolean ndaEnabled) {
         Project project = access.requireOwner(projectId, user);
+        if ((contractorsSeeAllTasks != null || ndaEnabled != null) && project.getType() != ProjectType.CORPORATE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Essas opções só existem em projetos corporativos.");
+        }
         if (contractorsSeeAllTasks != null) {
-            if (project.getType() != ProjectType.CORPORATE) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Essa opção só existe em projetos corporativos.");
-            }
             project.setContractorsSeeAllTasks(contractorsSeeAllTasks);
+        }
+        if (ndaEnabled != null) {
+            project.setNdaEnabled(ndaEnabled);
         }
         return projectRepository.save(project);
     }

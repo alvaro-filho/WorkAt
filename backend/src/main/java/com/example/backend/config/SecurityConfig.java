@@ -57,6 +57,8 @@ public class SecurityConfig {
                     .requestMatchers("/api/v1/auth/login").permitAll()
                     .requestMatchers("/api/v1/auth/**").permitAll()
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/showcase/public").permitAll()
+                    // Imagem de arte liberada é pública; o serviço confere o status e barra as travadas.
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/showcase/*/image").permitAll()
                     // Todas as outras requisições exigem autenticação
                     .anyRequest().authenticated()
             )

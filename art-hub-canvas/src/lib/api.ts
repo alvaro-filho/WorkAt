@@ -35,6 +35,8 @@ export interface Project {
   owner: UserSummary | null;
   /** Corporativo: contratados veem todas as tarefas (e não só as atribuídas a eles). */
   contractorsSeeAllTasks: boolean;
+  /** Corporativo: artes enviadas à vitrine nascem travadas e só o dono libera. */
+  ndaEnabled: boolean;
 }
 
 export interface TaskFile {
@@ -79,8 +81,11 @@ export interface ShowcaseArt {
   reviewNote: string | null;
   releaseDate: string | null;
   artistName: string;
+  artistUsername: string;
   companyName: string;
   projectId: number | null;
+  projectName: string | null;
+  taskId: number | null;
   createdAt: string;
 }
 
@@ -90,8 +95,36 @@ export interface PublicShowcaseArt {
   description: string | null;
   imageUrl: string | null;
   artistName: string;
+  artistUsername: string;
   companyName: string;
+  companyUsername: string;
+  projectName: string | null;
   releaseDate: string | null;
+  /** Quando a arte ficou pública (ordem do feed do Explorar). */
+  publishedAt: string | null;
+}
+
+export interface ProfileProject {
+  /** null quando o projeto está mascarado por NDA. */
+  id: number | null;
+  name: string | null;
+  description: string | null;
+  type: ProjectType;
+  role: ProjectRole;
+  status: "ACTIVE" | "CLOSED";
+  nda: boolean;
+  masked: boolean;
+  ownerName: string | null;
+}
+
+export interface Profile {
+  user: UserSummary;
+  me: boolean;
+  memberSince: string | null;
+  portfolio: PublicShowcaseArt[];
+  projects: ProfileProject[];
+  hiddenPersonalProjects: number;
+  heatmap: { date: string; count: number }[];
 }
 
 export type ApiTaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE";
@@ -235,8 +268,14 @@ export const api = {
     ),
   projects: () => request<Project[]>("/projects"),
   // 403 aqui significa "sem permissão neste projeto", não sessão inválida: confere a sessão em vez de deslogar.
-  project: (projectId: number) => request<Project>(`/projects/${projectId}`, {}, { authFailure: "verify-session" }),
-  createProject: (payload: { name: string; slug: string; description?: string | undefined; type: ProjectType }) =>
+  project: (projectId: number) =>
+    request<Project>(`/projects/${projectId}`, {}, { authFailure: "verify-session" }),
+  createProject: (payload: {
+    name: string;
+    slug: string;
+    description?: string | undefined;
+    type: ProjectType;
+  }) =>
     request<Project>(
       "/projects",
       { method: "POST", body: JSON.stringify(payload) },
@@ -263,7 +302,8 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
   deleteTask: (taskId: number) => request<void>(`/tasks/${taskId}`, { method: "DELETE" }),
-  task: (taskId: number) => request<ApiTask>(`/tasks/${taskId}`, {}, { authFailure: "verify-session" }),
+  task: (taskId: number) =>
+    request<ApiTask>(`/tasks/${taskId}`, {}, { authFailure: "verify-session" }),
   assignTask: (taskId: number, userId: number | null) =>
     request<ApiTask>(`/tasks/${taskId}/assignee`, {
       method: "PATCH",
@@ -271,9 +311,13 @@ export const api = {
     }),
   taskFiles: (taskId: number) =>
     request<TaskFile[]>(`/tasks/${taskId}/files`, {}, { authFailure: "verify-session" }),
-  markFinalFile: (fileId: number) => request<TaskFile>(`/files/${fileId}/final`, { method: "POST" }),
+  markFinalFile: (fileId: number) =>
+    request<TaskFile>(`/files/${fileId}/final`, { method: "POST" }),
   deleteFile: (fileId: number) => request<void>(`/files/${fileId}`, { method: "DELETE" }),
-  updateProjectSettings: (projectId: number, payload: { contractorsSeeAllTasks: boolean }) =>
+  updateProjectSettings: (
+    projectId: number,
+    payload: { contractorsSeeAllTasks?: boolean; ndaEnabled?: boolean },
+  ) =>
     request<Project>(`/projects/${projectId}/settings`, {
       method: "PATCH",
       body: JSON.stringify(payload),
@@ -283,18 +327,29 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
-  deleteProject: (projectId: number) => request<void>(`/projects/${projectId}`, { method: "DELETE" }),
-  members: (projectId: number) => request<ProjectMember[]>(`/projects/${projectId}/members`, {}, { authFailure: "verify-session" }),
+  deleteProject: (projectId: number) =>
+    request<void>(`/projects/${projectId}`, { method: "DELETE" }),
+  members: (projectId: number) =>
+    request<ProjectMember[]>(
+      `/projects/${projectId}/members`,
+      {},
+      { authFailure: "verify-session" },
+    ),
   removeMember: (projectId: number, userId: number) =>
     request<void>(`/projects/${projectId}/members/${userId}`, { method: "DELETE" }),
-  leaveProject: (projectId: number) => request<void>(`/projects/${projectId}/leave`, { method: "POST" }),
+  leaveProject: (projectId: number) =>
+    request<void>(`/projects/${projectId}/leave`, { method: "POST" }),
   invite: (projectId: number, email: string) =>
     request<ProjectInvitation>(`/projects/${projectId}/invitations`, {
       method: "POST",
       body: JSON.stringify({ email }),
     }),
   projectInvitations: (projectId: number) =>
-    request<ProjectInvitation[]>(`/projects/${projectId}/invitations`, {}, { authFailure: "verify-session" }),
+    request<ProjectInvitation[]>(
+      `/projects/${projectId}/invitations`,
+      {},
+      { authFailure: "verify-session" },
+    ),
   myInvitations: () => request<ProjectInvitation[]>("/invitations"),
   acceptInvitation: (invitationId: number) =>
     request<ProjectInvitation>(`/invitations/${invitationId}/accept`, { method: "POST" }),
@@ -308,6 +363,41 @@ export const api = {
     projectId?: number;
   }) => request<ShowcaseArt>("/showcase", { method: "POST", body: JSON.stringify(payload) }),
   myShowcase: () => request<ShowcaseArt[]>("/showcase/mine"),
+  profile: (username: string) =>
+    request<Profile>(
+      `/users/${encodeURIComponent(username)}/profile`,
+      {},
+      { authFailure: "verify-session" },
+    ),
+  submitToShowcase: (taskId: number, payload: { title?: string; description?: string }) =>
+    request<ShowcaseArt>(`/tasks/${taskId}/showcase`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  /** Arte da vitrine ligada à tarefa, ou undefined se ainda não foi enviada. */
+  taskShowcase: (taskId: number) =>
+    request<ShowcaseArt | undefined>(
+      `/tasks/${taskId}/showcase`,
+      {},
+      { authFailure: "verify-session" },
+    ),
+  taskCanvas: (taskId: number) =>
+    request<{ content: string; updatedByName: string | null; updatedAt: string | null }>(
+      `/tasks/${taskId}/canvas`,
+      {},
+      { authFailure: "verify-session" },
+    ),
+  saveTaskCanvas: (taskId: number, content: string) =>
+    request<{ content: string; updatedByName: string | null; updatedAt: string | null }>(
+      `/tasks/${taskId}/canvas`,
+      { method: "PUT", body: JSON.stringify({ content }) },
+    ),
+  projectShowcase: (projectId: number) =>
+    request<ShowcaseArt[]>(
+      `/projects/${projectId}/showcase`,
+      {},
+      { authFailure: "verify-session" },
+    ),
   showcaseInbox: () => request<ShowcaseArt[]>("/showcase/inbox"),
   updateShowcaseNdaStatus: (
     artId: number,
@@ -342,7 +432,8 @@ export function uploadTaskFile(
     const token = window.localStorage.getItem("authToken");
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) options.onProgress?.(Math.round((event.loaded / event.total) * 100));
+      if (event.lengthComputable)
+        options.onProgress?.(Math.round((event.loaded / event.total) * 100));
     };
     xhr.onload = () => {
       let data: unknown;
@@ -371,6 +462,7 @@ export async function fetchFileBlob(fileId: number): Promise<Blob> {
   const response = await fetch(`/api/v1/files/${fileId}/content`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!response.ok) throw new ApiError(`Não foi possível baixar o arquivo (${response.status}).`, response.status);
+  if (!response.ok)
+    throw new ApiError(`Não foi possível baixar o arquivo (${response.status}).`, response.status);
   return response.blob();
 }

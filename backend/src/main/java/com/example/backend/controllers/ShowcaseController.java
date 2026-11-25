@@ -47,8 +47,8 @@ public class ShowcaseController {
         return showcaseService.inbox(authenticatedUser(authentication)).stream().map(ShowcaseResponse::from).toList();
     }
 
+    // Quem libera é a parte contratante (dono do projeto), que pode ser estúdio ou artista: o serviço confere.
     @PatchMapping("/{id}/nda-status")
-    @PreAuthorize("hasRole('COMPANY')")
     public ShowcaseResponse updateNdaStatus(@PathVariable Long id, @RequestBody NdaStatusUpdateRequest request,
                                             Authentication authentication) {
         return ShowcaseResponse.from(showcaseService.updateNdaStatus(

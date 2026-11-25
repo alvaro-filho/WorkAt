@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { FolderKanban, GalleryVerticalEnd, House, LogOut, Palette } from "lucide-react";
+import { Compass, FolderKanban, LogOut, Palette, UserRound } from "lucide-react";
 
 import {
   Sidebar,
@@ -18,11 +18,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/AuthContext";
 
 // O Kanban e o Canvas vivem dentro de cada projeto/tarefa, não na navegação global.
-const items = [
-  { title: "Início", url: "/dashboard", icon: House },
-  { title: "Projetos", url: "/projetos", icon: FolderKanban },
-  { title: "Vitrine & NDA", url: "/showcase", icon: GalleryVerticalEnd },
-] as const;
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -30,6 +25,13 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  // Estilo GitHub: o perfil é a página inicial; o Kanban e o Canvas vivem dentro dos projetos.
+  const profileUrl = user ? `/u/${user.username}` : "/dashboard";
+  const items = [
+    { title: "Meu perfil", url: profileUrl, icon: UserRound },
+    { title: "Projetos", url: "/projetos", icon: FolderKanban },
+    { title: "Explorar", url: "/explorar", icon: Compass },
+  ];
 
   const handleLogout = () => {
     logout();
