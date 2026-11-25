@@ -42,7 +42,7 @@ s,m=call("GET",f"/projects/{corp}/members",tb); check("membro vê a lista de mem
 s,t=call("POST",f"/projects/{corp}/tasks",ta,{"title":"Concept do herói","priority":"HIGH"}); check("dono cria tarefa",s,201); tid=t["id"]
 s,_=call("GET",f"/projects/{corp}/tasks",tb); check("contratado vê as tarefas",s,200)
 s,_=call("POST",f"/projects/{corp}/tasks",tb,{"title":"x","priority":"LOW"}); check("contratado não cria tarefa no corporativo",s,403)
-s,_=call("PATCH",f"/tasks/{tid}/status",tb,{"status":"DONE"}); check("contratado não move (até a fatia 2)",s,403)
+s,_=call("PATCH",f"/tasks/{tid}/status",tb,{"status":"DONE"}); check("contratado nem vê tarefa não atribuída (regra da fatia 2)",s,404)
 s,_=call("PATCH",f"/projects/{corp}/status",tb,{"status":"CLOSED"}); check("membro não encerra o projeto",s,403)
 s,_=call("POST",f"/projects/{corp}/invitations",tb,{"email":ua["email"]}); check("membro não convida",s,403)
 
