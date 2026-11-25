@@ -15,3 +15,6 @@ node_modules/
 # Arquivos enviados nas tarefas (armazenamento local de desenvolvimento)
 backend/uploads/
 uploads/
+
+# Saída local do Vercel
+.vercel/
