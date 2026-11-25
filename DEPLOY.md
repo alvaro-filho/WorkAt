@@ -2,7 +2,7 @@
 
 | Peça | Onde | Endereço final (exemplo) |
 | --- | --- | --- |
-| Banco PostgreSQL | Neon (plano Free) | `ep-xxxx.us-east-1.aws.neon.tech` |
+| Banco PostgreSQL | Neon (plano Free) | `ep-xxxx.sa-east-1.aws.neon.tech` |
 | Backend Spring Boot | Render (Web Service, plano Free, Docker) | `https://workat-api.onrender.com` |
 | Frontend | Vercel (plano Hobby) | `https://work-at.vercel.app` |
 
@@ -23,15 +23,15 @@ fala com o Vercel e não há configuração de CORS.
 
 1. Entre em [neon.tech](https://neon.tech) com a sua conta do GitHub e crie um projeto chamado `workat`.
    - Postgres: a versão padrão.
-   - Região: **AWS US East (N. Virginia)**, a mesma região do backend no Render (o Render grátis não tem
-     servidor no Brasil, e banco longe do backend deixa cada tela mais lenta).
+   - Região: AWS São Paulo (escolhida pela equipe). O Render grátis não tem servidor no Brasil e roda em
+     Virginia, então cada consulta atravessa o continente: as telas ficam um pouco mais lentas, mas funcionam.
 2. No painel do projeto, abra **Connect** (detalhes da conexão):
    - Deixe **Connection pooling desligado** (conexão direta, sem `-pooler` no host).
    - Anote o **host**, o **banco** (geralmente `neondb`), o **usuário** e a **senha**.
 3. Monte o endereço JDBC (troque host e banco pelos seus):
 
    ```
-   jdbc:postgresql://ep-xxxx.us-east-1.aws.neon.tech/neondb?sslmode=require
+   jdbc:postgresql://ep-xxxx.sa-east-1.aws.neon.tech/neondb?sslmode=require
    ```
 
 Não precisa criar tabelas: o backend cria tudo sozinho na primeira vez que liga.
