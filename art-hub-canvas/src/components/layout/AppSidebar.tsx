@@ -1,12 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import {
-  LayoutDashboard,
-  KanbanSquare,
-  Frame,
-  GalleryVerticalEnd,
-  Palette,
-  LogOut,
-} from "lucide-react";
+import { FolderKanban, GalleryVerticalEnd, House, LogOut, Palette } from "lucide-react";
 
 import {
   Sidebar,
@@ -24,10 +17,10 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/AuthContext";
 
+// O Kanban e o Canvas vivem dentro de cada projeto/tarefa, não na navegação global.
 const items = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Kanban & Timeline", url: "/kanban", icon: KanbanSquare },
-  { title: "Canvas Infinito", url: "/canvas", icon: Frame },
+  { title: "Início", url: "/dashboard", icon: House },
+  { title: "Projetos", url: "/projetos", icon: FolderKanban },
   { title: "Vitrine & NDA", url: "/showcase", icon: GalleryVerticalEnd },
 ] as const;
 
@@ -52,8 +45,8 @@ export function AppSidebar() {
           </div>
           {!collapsed && (
             <div className="leading-tight">
-              <p className="text-sm font-semibold">Ateliê Studio</p>
-              <p className="text-xs text-muted-foreground">Gestão de produção</p>
+              <p className="text-sm font-semibold">Art Hub</p>
+              <p className="text-xs text-muted-foreground">Portfólio e produção</p>
             </div>
           )}
         </div>
@@ -66,7 +59,11 @@ export function AppSidebar() {
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={pathname === item.url} tooltip={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === item.url || pathname.startsWith(`${item.url}/`)}
+                    tooltip={item.title}
+                  >
                     <Link to={item.url} className="flex items-center gap-2">
                       <item.icon className="size-4" />
                       <span>{item.title}</span>

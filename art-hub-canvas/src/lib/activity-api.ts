@@ -4,7 +4,7 @@ export type ActivityEventType =
   | "CANVAS_EDIT"
   | "FILE_UPLOAD";
 
-const API_URL = "http://localhost:8080/api/v1/activity";
+const API_URL = "/api/v1/activity";
 
 function getAuthHeaders(): HeadersInit {
   const token = typeof window === "undefined" ? null : localStorage.getItem("authToken");

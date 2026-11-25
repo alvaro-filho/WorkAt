@@ -13,13 +13,43 @@ export interface AuthResponse {
   user: ApiUser;
 }
 
+export type ProjectType = "PERSONAL" | "COOPERATIVE" | "CORPORATE";
+export type ProjectRole = "OWNER" | "MEMBER";
+
+export interface UserSummary {
+  id: number;
+  fullName: string;
+  username: string;
+  role: ApiUser["role"];
+}
+
 export interface Project {
   id: number;
   name: string;
   slug: string;
   description: string | null;
-  category: "EMPRESA" | "ESTUDIO" | "PESSOAL";
+  type: ProjectType;
   status: "ACTIVE" | "CLOSED";
+  /** Papel do usuário logado neste projeto. */
+  myRole: ProjectRole;
+  owner: UserSummary | null;
+}
+
+export interface ProjectMember {
+  user: UserSummary;
+  role: ProjectRole;
+  joinedAt: string;
+}
+
+export interface ProjectInvitation {
+  id: number;
+  projectId: number;
+  projectName: string;
+  projectType: ProjectType;
+  invitedUser: UserSummary;
+  invitedBy: UserSummary;
+  status: "PENDING" | "ACCEPTED" | "DECLINED";
+  createdAt: string;
 }
 
 export type NdaStatus = "LOCKED_BY_NDA" | "APPROVED_FOR_RELEASE";
@@ -185,7 +215,9 @@ export const api = {
       { authFailure: "ignore" },
     ),
   projects: () => request<Project[]>("/projects"),
-  createProject: (payload: Omit<Project, "id" | "status">) =>
+  // 403 aqui significa "sem permissão neste projeto", não sessão inválida: confere a sessão em vez de deslogar.
+  project: (projectId: number) => request<Project>(`/projects/${projectId}`, {}, { authFailure: "verify-session" }),
+  createProject: (payload: { name: string; slug: string; description?: string | undefined; type: ProjectType }) =>
     request<Project>(
       "/projects",
       { method: "POST", body: JSON.stringify(payload) },
@@ -212,6 +244,22 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
   deleteProject: (projectId: number) => request<void>(`/projects/${projectId}`, { method: "DELETE" }),
+  members: (projectId: number) => request<ProjectMember[]>(`/projects/${projectId}/members`, {}, { authFailure: "verify-session" }),
+  removeMember: (projectId: number, userId: number) =>
+    request<void>(`/projects/${projectId}/members/${userId}`, { method: "DELETE" }),
+  leaveProject: (projectId: number) => request<void>(`/projects/${projectId}/leave`, { method: "POST" }),
+  invite: (projectId: number, email: string) =>
+    request<ProjectInvitation>(`/projects/${projectId}/invitations`, {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  projectInvitations: (projectId: number) =>
+    request<ProjectInvitation[]>(`/projects/${projectId}/invitations`, {}, { authFailure: "verify-session" }),
+  myInvitations: () => request<ProjectInvitation[]>("/invitations"),
+  acceptInvitation: (invitationId: number) =>
+    request<ProjectInvitation>(`/invitations/${invitationId}/accept`, { method: "POST" }),
+  declineInvitation: (invitationId: number) =>
+    request<ProjectInvitation>(`/invitations/${invitationId}/decline`, { method: "POST" }),
   createShowcaseArt: (payload: {
     title: string;
     description?: string;

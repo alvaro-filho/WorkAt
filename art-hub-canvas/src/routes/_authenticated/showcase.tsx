@@ -22,7 +22,7 @@ import { api, type NdaStatus, type Project, type PublicShowcaseArt, type Showcas
 export const Route = createFileRoute("/_authenticated/showcase")({
   head: () => ({
     meta: [
-      { title: "Vitrine & NDA — Ateliê Studio" },
+      { title: "Vitrine & NDA — Art Hub" },
       { name: "description", content: "Controle de NDA e publicação de artes." },
     ],
   }),

@@ -6,23 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  ApiError,
-  type ApiPriority,
-  type ApiTask,
-  type ApiTaskStatus,
-  type Project,
-} from "@/lib/api";
+import type { ApiPriority, ApiTask, ApiTaskStatus } from "@/lib/api";
 
 type TaskStatus = "todo" | "progress" | "review" | "done";
 const COLUMNS: { id: TaskStatus; label: string }[] = [
@@ -53,31 +37,26 @@ function formatDeadline(value: string | null) {
 }
 
 export function KanbanBoard({
-  projects,
-  selectedProjectId,
-  onSelectProject,
   tasks,
   loading,
   error,
-  onCreateProject,
+  closed,
+  canManageTasks,
+  canMoveTasks,
+  readOnlyHint,
   onCreateTask,
   onMoveTask,
   onOpenTask,
-  onUpdateProjectStatus,
-  onDeleteProject,
-  projectActionLoading,
 }: {
-  projects: Project[];
-  selectedProjectId: number | null;
-  onSelectProject: (id: number) => void;
   tasks: ApiTask[];
   loading: boolean;
   error: string | null;
-  onCreateProject: (data: {
-    name: string;
-    description: string;
-    category: Project["category"];
-  }) => Promise<void>;
+  /** Projeto encerrado: tudo somente leitura. */
+  closed: boolean;
+  canManageTasks: boolean;
+  canMoveTasks: boolean;
+  /** Explica por que o usuário não pode mexer no quadro (ex.: contratado no corporativo). */
+  readOnlyHint?: string | undefined;
   onCreateTask: (data: {
     title: string;
     description: string;
@@ -86,33 +65,23 @@ export function KanbanBoard({
   }) => Promise<void>;
   onMoveTask: (taskId: number, status: ApiTaskStatus) => Promise<ApiTask>;
   onOpenTask: (task: ApiTask) => void;
-  onUpdateProjectStatus: (status: Project["status"]) => Promise<void>;
-  onDeleteProject: () => Promise<void>;
-  projectActionLoading: boolean;
 }) {
   const [localTasks, setLocalTasks] = useState(tasks);
   const [dragging, setDragging] = useState<number | null>(null);
   const [overColumn, setOverColumn] = useState<TaskStatus | null>(null);
-  const [projectForm, setProjectForm] = useState(false);
   const [taskForm, setTaskForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [projectName, setProjectName] = useState("");
-  const [projectDescription, setProjectDescription] = useState("");
-  const [projectCategory, setProjectCategory] = useState<Project["category"]>("PESSOAL");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<ApiPriority>("MEDIUM");
   const [deadline, setDeadline] = useState("");
-  const [projectConfirmation, setProjectConfirmation] = useState<"close" | "delete" | null>(null);
-  const [projectActionError, setProjectActionError] = useState<string | null>(null);
-  const selectedProject = projects.find((project) => project.id === selectedProjectId);
-  const projectClosed = selectedProject?.status === "CLOSED";
+  const draggable = canMoveTasks && !closed;
 
   useEffect(() => setLocalTasks(tasks), [tasks]);
 
   const move = async (id: number, status: TaskStatus) => {
-    if (projectClosed) return;
+    if (!draggable) return;
     const task = localTasks.find((item) => item.id === id);
     if (!task || toUiStatus[task.status] === status) return;
     const previous = localTasks;
@@ -129,35 +98,9 @@ export function KanbanBoard({
     }
   };
 
-  const submitProject = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setFormError(null);
-    try {
-      await onCreateProject({
-        name: projectName,
-        description: projectDescription,
-        category: projectCategory,
-      });
-      setProjectName("");
-      setProjectDescription("");
-      setProjectForm(false);
-    } catch (e) {
-      setFormError(
-        e instanceof ApiError && e.status === 403
-          ? "Seu perfil Empresa não pode criar projetos. Use uma conta de artista para esta ação."
-          : e instanceof Error
-            ? e.message
-            : "Não foi possível criar o projeto.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const submitTask = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (projectClosed) return;
+    if (!canManageTasks || closed) return;
     setBusy(true);
     setFormError(null);
     try {
@@ -174,204 +117,92 @@ export function KanbanBoard({
     }
   };
 
-  const confirmProjectAction = async () => {
-    if (!projectConfirmation) return;
-    setProjectActionError(null);
-    try {
-      if (projectConfirmation === "close") await onUpdateProjectStatus("CLOSED");
-      else await onDeleteProject();
-      setProjectConfirmation(null);
-    } catch (e) {
-      setProjectActionError(e instanceof Error ? e.message : "Não foi possível concluir a ação.");
-    }
-  };
-
-  const resumeProject = async () => {
-    setProjectActionError(null);
-    try {
-      await onUpdateProjectStatus("ACTIVE");
-    } catch (e) {
-      setProjectActionError(e instanceof Error ? e.message : "Não foi possível retomar o projeto.");
-    }
-  };
-
   return (
     <div className="space-y-4">
-      <div className="glass flex flex-wrap items-end gap-3 rounded-2xl p-4">
-        <div className="min-w-56 flex-1 space-y-2">
-          <Label htmlFor="projectSelect">Projeto</Label>
-          <select
-            id="projectSelect"
-            value={selectedProjectId ?? ""}
-            onChange={(e) => onSelectProject(Number(e.target.value))}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            disabled={!projects.length}
-          >
-            {!projects.length && <option value="">Nenhum projeto</option>}
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}{project.status === "CLOSED" ? " (encerrado)" : ""}
-              </option>
-            ))}
-          </select>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setProjectForm((v) => !v);
-            setTaskForm(false);
-            setFormError(null);
-          }}
-        >
-          <Plus className="size-4" /> Novo projeto
-        </Button>
-        {selectedProject && !projectClosed && (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={projectActionLoading}
-            onClick={() => setProjectConfirmation("close")}
-          >
-            Encerrar projeto
-          </Button>
-        )}
-        {selectedProject && projectClosed && (
-          <>
-            <Button type="button" variant="outline" disabled={projectActionLoading} onClick={() => void resumeProject()}>
-              {projectActionLoading ? "Retomando..." : "Retomar projeto"}
-            </Button>
+      {(closed || canManageTasks || readOnlyHint) && (
+        <div className="glass flex flex-wrap items-center gap-3 rounded-2xl p-4">
+          {closed ? (
+            <p role="status" className="mr-auto text-sm text-amber-300">
+              Projeto encerrado. O dono pode retomá-lo em Configurações.
+            </p>
+          ) : !canManageTasks && readOnlyHint ? (
+            <p role="status" className="mr-auto text-sm text-muted-foreground">
+              {readOnlyHint}
+            </p>
+          ) : (
+            <p className="mr-auto text-sm text-muted-foreground">
+              Arraste os cartões entre as colunas para atualizar o status.
+            </p>
+          )}
+          {canManageTasks && !closed && (
             <Button
               type="button"
-              variant="destructive"
-              disabled={projectActionLoading}
-              onClick={() => setProjectConfirmation("delete")}
+              className="gradient-primary text-primary-foreground"
+              onClick={() => {
+                setTaskForm((v) => !v);
+                setFormError(null);
+              }}
             >
-              Apagar projeto
+              <Plus className="size-4" /> Nova tarefa
             </Button>
-          </>
-        )}
-        {projectClosed && (
-          <div role="status" className="w-full rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-            Projeto encerrado. Retome para alterar tarefas.
-          </div>
-        )}
-        <Button
-          type="button"
-          className="gradient-primary text-primary-foreground"
-          disabled={!selectedProjectId || projectClosed || projectActionLoading}
-          onClick={() => {
-            setTaskForm((v) => !v);
-            setProjectForm(false);
-            setFormError(null);
-          }}
-        >
-          <Plus className="size-4" /> Nova tarefa
-        </Button>
-        {projectForm && (
-          <form
-            onSubmit={submitProject}
-            className="grid w-full gap-3 border-t border-border pt-4 sm:grid-cols-2"
-          >
-            <div className="space-y-2">
-              <Label htmlFor="newProjectName">Nome do projeto</Label>
-              <Input
-                id="newProjectName"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="newProjectCategory">Categoria</Label>
-              <select
-                id="newProjectCategory"
-                value={projectCategory}
-                onChange={(e) => setProjectCategory(e.target.value as Project["category"])}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="PESSOAL">Pessoal</option>
-                <option value="EMPRESA">Empresa</option>
-                <option value="ESTUDIO">Estúdio</option>
-              </select>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="newProjectDescription">Descrição</Label>
-              <Textarea
-                id="newProjectDescription"
-                value={projectDescription}
-                onChange={(e) => setProjectDescription(e.target.value)}
-              />
-            </div>
-            <Button type="submit" disabled={busy}>
-              {busy ? "Criando..." : "Criar projeto"}
-            </Button>
-          </form>
-        )}
-        {taskForm && !projectClosed && (
-          <form
-            onSubmit={submitTask}
-            className="grid w-full gap-3 border-t border-border pt-4 sm:grid-cols-2"
-          >
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="newTaskTitle">Título</Label>
-              <Input
-                id="newTaskTitle"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="newTaskDescription">Descrição</Label>
-              <Textarea
-                id="newTaskDescription"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="newTaskPriority">Prioridade</Label>
-              <select
-                id="newTaskPriority"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as ApiPriority)}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="LOW">Baixa</option>
-                <option value="MEDIUM">Média</option>
-                <option value="HIGH">Alta</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="newTaskDeadline">Prazo</Label>
-              <Input
-                id="newTaskDeadline"
-                type="date"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-              />
-            </div>
-            <Button type="submit" disabled={busy}>
-              {busy ? "Criando..." : "Criar tarefa"}
-            </Button>
-          </form>
-        )}
-        {formError && (
-          <p role="alert" className="w-full text-sm text-destructive">
-            {formError}
-          </p>
-        )}
-        {projectActionError && (
-          <p role="alert" className="w-full text-sm text-destructive">{projectActionError}</p>
-        )}
-      </div>
-
-      {!projects.length && !loading && (
-        <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
-          Nenhum projeto ainda. Crie um projeto para começar.
+          )}
+          {taskForm && canManageTasks && !closed && (
+            <form
+              onSubmit={submitTask}
+              className="grid w-full gap-3 border-t border-border pt-4 sm:grid-cols-2"
+            >
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="newTaskTitle">Título</Label>
+                <Input
+                  id="newTaskTitle"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="newTaskDescription">Descrição</Label>
+                <Textarea
+                  id="newTaskDescription"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="newTaskPriority">Prioridade</Label>
+                <select
+                  id="newTaskPriority"
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as ApiPriority)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="LOW">Baixa</option>
+                  <option value="MEDIUM">Média</option>
+                  <option value="HIGH">Alta</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="newTaskDeadline">Prazo</Label>
+                <Input
+                  id="newTaskDeadline"
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                />
+              </div>
+              <Button type="submit" disabled={busy}>
+                {busy ? "Criando..." : "Criar tarefa"}
+              </Button>
+            </form>
+          )}
+          {formError && (
+            <p role="alert" className="w-full text-sm text-destructive">
+              {formError}
+            </p>
+          )}
         </div>
       )}
+
       {error && (
         <div role="alert" className="glass rounded-2xl p-4 text-sm text-destructive">
           {error}
@@ -382,13 +213,13 @@ export function KanbanBoard({
           Carregando tarefas...
         </div>
       )}
-      {!loading && selectedProjectId && !localTasks.length && !error && (
+      {!loading && !localTasks.length && !error && (
         <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
           Este projeto ainda não tem tarefas.
         </div>
       )}
 
-      {selectedProjectId && !loading && (
+      {!loading && (
         <div className="grid gap-4 lg:grid-cols-4">
           {COLUMNS.map((col) => {
             const items = localTasks.filter((task) => toUiStatus[task.status] === col.id);
@@ -396,13 +227,13 @@ export function KanbanBoard({
               <section
                 key={col.id}
                 onDragOver={(e) => {
-                  if (projectClosed) return;
+                  if (!draggable) return;
                   e.preventDefault();
                   setOverColumn(col.id);
                 }}
                 onDragLeave={() => setOverColumn((c) => (c === col.id ? null : c))}
                 onDrop={() => {
-                  if (projectClosed) return;
+                  if (!draggable) return;
                   if (dragging !== null) void move(dragging, col.id);
                   setDragging(null);
                   setOverColumn(null);
@@ -419,14 +250,16 @@ export function KanbanBoard({
                   {items.map((task) => (
                     <article
                       key={task.id}
-                      draggable={!projectClosed}
-                      onDragStart={() => !projectClosed && setDragging(task.id)}
+                      draggable={draggable}
+                      onDragStart={() => draggable && setDragging(task.id)}
                       onDragEnd={() => setDragging(null)}
                       onClick={() => onOpenTask(task)}
                       className={`glass glass-hover cursor-pointer rounded-xl p-3 ${dragging === task.id ? "opacity-50" : ""}`}
                     >
                       <div className="flex items-start gap-2">
-                        <GripVertical className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                        {draggable && (
+                          <GripVertical className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                        )}
                         <p className="min-w-0 text-sm font-medium">{task.title}</p>
                       </div>
                       {task.description && (
@@ -460,49 +293,6 @@ export function KanbanBoard({
           })}
         </div>
       )}
-      <AlertDialog
-        open={projectConfirmation !== null}
-        onOpenChange={(open) => {
-          if (!open && !projectActionLoading) setProjectConfirmation(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {projectConfirmation === "delete" ? "Apagar projeto?" : "Encerrar projeto?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {projectConfirmation === "delete"
-                ? "Esta ação é permanente e apagará todas as tarefas deste projeto."
-                : "O projeto passará a ser somente leitura. Você poderá retomá-lo depois."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {projectActionError && (
-            <p role="alert" className="text-sm text-destructive">{projectActionError}</p>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={projectActionLoading}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={projectActionLoading}
-              onClick={(event) => {
-                event.preventDefault();
-                void confirmProjectAction();
-              }}
-              className={
-                projectConfirmation === "delete"
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  : ""
-              }
-            >
-              {projectActionLoading
-                ? "Aguarde..."
-                : projectConfirmation === "delete"
-                  ? "Apagar permanentemente"
-                  : "Encerrar projeto"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

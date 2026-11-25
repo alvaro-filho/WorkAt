@@ -19,13 +19,13 @@ export const Route = createFileRoute("/_authenticated/canvas")({
   }),
   head: () => ({
     meta: [
-      { title: "Canvas Infinito — Ateliê Studio" },
+      { title: "Canvas Infinito — Art Hub" },
       {
         name: "description",
         content:
           "Moodboard infinito com notas adesivas, referências e vetores para cada tarefa do projeto.",
       },
-      { property: "og:title", content: "Canvas Infinito — Ateliê Studio" },
+      { property: "og:title", content: "Canvas Infinito — Art Hub" },
       {
         property: "og:description",
         content:
