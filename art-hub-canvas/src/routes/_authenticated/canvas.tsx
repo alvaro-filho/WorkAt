@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/canvas")({
   },
   head: () => ({
     meta: [
-      { title: "Canvas Infinito — Art Hub" },
+      { title: "Canvas Infinito — WorkAt" },
       {
         name: "description",
         content: "Painel infinito de referências de cada tarefa, estilo PureRef.",

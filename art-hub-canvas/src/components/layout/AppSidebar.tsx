@@ -47,7 +47,7 @@ export function AppSidebar() {
           </div>
           {!collapsed && (
             <div className="leading-tight">
-              <p className="text-sm font-semibold">Art Hub</p>
+              <p className="text-sm font-semibold">WorkAt</p>
               <p className="text-xs text-muted-foreground">Portfólio e produção</p>
             </div>
           )}

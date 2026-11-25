@@ -56,7 +56,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { canWorkOnTask, projectPermissions } from "@/lib/project-labels";
 
 export const Route = createFileRoute("/_authenticated/projetos/$projectId_/tarefas/$taskId")({
-  head: () => ({ meta: [{ title: "Tarefa — Art Hub" }] }),
+  head: () => ({ meta: [{ title: "Tarefa — WorkAt" }] }),
   component: TaskPage,
 });
 

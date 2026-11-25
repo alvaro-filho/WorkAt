@@ -20,7 +20,7 @@ import { api, type Project, type ProjectInvitation, type ProjectType } from "@/l
 import { makeSlug, PROJECT_TYPES, projectTypeInfo, roleLabel } from "@/lib/project-labels";
 
 export const Route = createFileRoute("/_authenticated/projetos/")({
-  head: () => ({ meta: [{ title: "Projetos — Art Hub" }] }),
+  head: () => ({ meta: [{ title: "Projetos — WorkAt" }] }),
   component: ProjectsPage,
 });
 

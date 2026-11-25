@@ -11,7 +11,7 @@ import { api, ApiError, type Profile, type ProfileProject } from "@/lib/api";
 import { projectTypeInfo, roleLabel } from "@/lib/project-labels";
 
 export const Route = createFileRoute("/_authenticated/u/$username")({
-  head: () => ({ meta: [{ title: "Perfil — Art Hub" }] }),
+  head: () => ({ meta: [{ title: "Perfil — WorkAt" }] }),
   component: ProfilePage,
 });
 
@@ -117,7 +117,7 @@ function ProfilePage() {
             {profile.memberSince && (
               <li className="flex items-center gap-2">
                 <CalendarDays className="size-4" />
-                No Art Hub desde{" "}
+                No WorkAt desde{" "}
                 {new Date(profile.memberSince).toLocaleDateString("pt-BR", {
                   month: "long",
                   year: "numeric",

@@ -43,7 +43,7 @@ import {
 } from "@/lib/project-labels";
 
 export const Route = createFileRoute("/_authenticated/projetos/$projectId")({
-  head: () => ({ meta: [{ title: "Projeto — Art Hub" }] }),
+  head: () => ({ meta: [{ title: "Projeto — WorkAt" }] }),
   component: ProjectPage,
 });
 
@@ -393,7 +393,7 @@ function MembersTab({ project }: { project: Project }) {
             />
             <p className="text-xs text-muted-foreground">
               {permissions.canInvite
-                ? "A pessoa precisa já ter conta no Art Hub e vai ver o convite na tela de Projetos."
+                ? "A pessoa precisa já ter conta no WorkAt e vai ver o convite na tela de Projetos."
                 : "Retome o projeto para convidar pessoas."}
             </p>
             <Button type="submit" disabled={busy || !permissions.canInvite} className="w-full">

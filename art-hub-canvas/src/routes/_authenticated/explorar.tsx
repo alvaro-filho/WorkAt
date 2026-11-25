@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { api, type PublicShowcaseArt } from "@/lib/api";
 
 export const Route = createFileRoute("/_authenticated/explorar")({
-  head: () => ({ meta: [{ title: "Explorar — Art Hub" }] }),
+  head: () => ({ meta: [{ title: "Explorar — WorkAt" }] }),
   component: ExplorePage,
 });
 
