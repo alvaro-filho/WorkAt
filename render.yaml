@@ -1,0 +1,23 @@
+# Blueprint do Render: cria o backend do WorkAt a partir da pasta backend/ (Docker, plano grátis).
+# As variáveis com "sync: false" são pedidas na hora da criação (não ficam no repositório).
+services:
+  - type: web
+    name: workat-api
+    runtime: docker
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    branch: master
+    healthCheckPath: /api/v1/showcase/public
+    autoDeploy: true
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: ARTHUB_DEV_JWT_SECRET
+        sync: false
+      - key: ARTHUB_DEV_JWT_EXPIRATION_MS
+        value: "86400000"
