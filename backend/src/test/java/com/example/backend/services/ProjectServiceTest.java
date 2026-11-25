@@ -4,6 +4,8 @@ import com.example.backend.models.Project;
 import com.example.backend.models.ProjectStatus;
 import com.example.backend.models.User;
 import com.example.backend.repositories.ActivityEventRepository;
+import com.example.backend.repositories.ProjectInvitationRepository;
+import com.example.backend.repositories.ProjectMemberRepository;
 import com.example.backend.repositories.ProjectRepository;
 import com.example.backend.repositories.TaskRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +21,8 @@ class ProjectServiceTest {
     private ProjectRepository projectRepository;
     private TaskRepository taskRepository;
     private ActivityEventRepository activityEventRepository;
+    private ProjectMemberRepository memberRepository;
+    private ProjectInvitationRepository invitationRepository;
     private ProjectService projectService;
     private User creator;
     private Project project;
@@ -28,7 +32,10 @@ class ProjectServiceTest {
         projectRepository = mock(ProjectRepository.class);
         taskRepository = mock(TaskRepository.class);
         activityEventRepository = mock(ActivityEventRepository.class);
-        projectService = new ProjectService(projectRepository, taskRepository, activityEventRepository);
+        memberRepository = mock(ProjectMemberRepository.class);
+        invitationRepository = mock(ProjectInvitationRepository.class);
+        projectService = new ProjectService(projectRepository, taskRepository, activityEventRepository,
+                memberRepository, invitationRepository, new ProjectAccessService(projectRepository, memberRepository));
         creator = new User();
         project = new Project();
         project.setId(31L);
@@ -37,7 +44,7 @@ class ProjectServiceTest {
 
     @Test
     void closesAndResumesOwnedProject() {
-        when(projectRepository.findByIdAndCreatedByUser(31L, creator)).thenReturn(Optional.of(project));
+        when(projectRepository.findById(31L)).thenReturn(Optional.of(project));
         when(projectRepository.save(project)).thenReturn(project);
 
         assertSame(project, projectService.updateStatus(31L, creator, "CLOSED"));
@@ -48,7 +55,7 @@ class ProjectServiceTest {
 
     @Test
     void cannotCloseAnotherCreatorsProject() {
-        when(projectRepository.findByIdAndCreatedByUser(31L, creator)).thenReturn(Optional.empty());
+        when(projectRepository.findById(31L)).thenReturn(Optional.empty());
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> projectService.updateStatus(31L, creator, "CLOSED"));
@@ -59,7 +66,7 @@ class ProjectServiceTest {
 
     @Test
     void cannotDeleteActiveProject() {
-        when(projectRepository.findByIdAndCreatedByUser(31L, creator)).thenReturn(Optional.of(project));
+        when(projectRepository.findById(31L)).thenReturn(Optional.of(project));
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> projectService.deleteProject(31L, creator));
@@ -73,18 +80,20 @@ class ProjectServiceTest {
     @Test
     void deletesClosedProjectAndItsTasksAndActivityEvents() {
         project.setStatus(ProjectStatus.CLOSED);
-        when(projectRepository.findByIdAndCreatedByUser(31L, creator)).thenReturn(Optional.of(project));
+        when(projectRepository.findById(31L)).thenReturn(Optional.of(project));
 
         projectService.deleteProject(31L, creator);
 
         verify(activityEventRepository).deleteByProject(project);
         verify(taskRepository).deleteByProject(project);
+        verify(invitationRepository).deleteByProject(project);
+        verify(memberRepository).deleteByProject(project);
         verify(projectRepository).delete(project);
     }
 
     @Test
     void rejectsInvalidProjectStatus() {
-        when(projectRepository.findByIdAndCreatedByUser(31L, creator)).thenReturn(Optional.of(project));
+        when(projectRepository.findById(31L)).thenReturn(Optional.of(project));
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> projectService.updateStatus(31L, creator, "PAUSED"));

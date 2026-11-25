@@ -7,6 +7,7 @@ import com.example.backend.models.Task;
 import com.example.backend.models.TaskPriority;
 import com.example.backend.models.TaskStatus;
 import com.example.backend.models.User;
+import com.example.backend.repositories.ProjectMemberRepository;
 import com.example.backend.repositories.ProjectRepository;
 import com.example.backend.repositories.TaskRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +22,7 @@ import static org.mockito.Mockito.*;
 
 class TaskServiceTest {
     private ProjectRepository projectRepository;
+    private ProjectMemberRepository memberRepository;
     private TaskRepository taskRepository;
     private TaskService taskService;
     private User creator;
@@ -30,7 +32,8 @@ class TaskServiceTest {
     void setUp() {
         projectRepository = mock(ProjectRepository.class);
         taskRepository = mock(TaskRepository.class);
-        taskService = new TaskService(projectRepository, taskRepository);
+        memberRepository = mock(ProjectMemberRepository.class);
+        taskService = new TaskService(new ProjectAccessService(projectRepository, memberRepository), taskRepository);
         creator = new User();
         project = new Project();
         project.setId(15L);
@@ -39,7 +42,7 @@ class TaskServiceTest {
 
     @Test
     void createsTaskWithTodoAndDefaultMediumPriority() {
-        when(projectRepository.findByIdAndCreatedByUser(15L, creator)).thenReturn(Optional.of(project));
+        when(projectRepository.findById(15L)).thenReturn(Optional.of(project));
         when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
         TaskCreateRequest request = new TaskCreateRequest();
         request.setTitle("  Draft  ");
@@ -57,7 +60,7 @@ class TaskServiceTest {
 
     @Test
     void doesNotCreateTaskInAnotherCreatorsProject() {
-        when(projectRepository.findByIdAndCreatedByUser(15L, creator)).thenReturn(Optional.empty());
+        when(projectRepository.findById(15L)).thenReturn(Optional.empty());
         TaskCreateRequest request = new TaskCreateRequest();
         request.setTitle("Draft");
 
@@ -72,7 +75,7 @@ class TaskServiceTest {
     void deletesTaskForItsCreator() {
         Task task = new Task();
         task.setProject(project);
-        when(taskRepository.findByIdAndProject_CreatedByUser(22L, creator)).thenReturn(Optional.of(task));
+        when(taskRepository.findById(22L)).thenReturn(Optional.of(task));
 
         taskService.deleteTask(22L, creator);
 
@@ -81,7 +84,7 @@ class TaskServiceTest {
 
     @Test
     void cannotDeleteTaskFromAnotherCreator() {
-        when(taskRepository.findByIdAndProject_CreatedByUser(22L, creator)).thenReturn(Optional.empty());
+        when(taskRepository.findById(22L)).thenReturn(Optional.empty());
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> taskService.deleteTask(22L, creator));
@@ -95,7 +98,7 @@ class TaskServiceTest {
         project.setStatus(ProjectStatus.CLOSED);
         Task task = new Task();
         task.setProject(project);
-        when(taskRepository.findByIdAndProject_CreatedByUser(22L, creator)).thenReturn(Optional.of(task));
+        when(taskRepository.findById(22L)).thenReturn(Optional.of(task));
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> taskService.deleteTask(22L, creator));
@@ -108,7 +111,7 @@ class TaskServiceTest {
     @Test
     void cannotCreateTaskInClosedProject() {
         project.setStatus(ProjectStatus.CLOSED);
-        when(projectRepository.findByIdAndCreatedByUser(15L, creator)).thenReturn(Optional.of(project));
+        when(projectRepository.findById(15L)).thenReturn(Optional.of(project));
         TaskCreateRequest request = new TaskCreateRequest();
         request.setTitle("Draft");
 
@@ -124,7 +127,7 @@ class TaskServiceTest {
     void movesTaskStatusForItsCreator() {
         Task task = new Task();
         task.setProject(project);
-        when(taskRepository.findByIdAndProject_CreatedByUser(22L, creator)).thenReturn(Optional.of(task));
+        when(taskRepository.findById(22L)).thenReturn(Optional.of(task));
         when(taskRepository.save(task)).thenReturn(task);
 
         Task updated = taskService.updateStatus(22L, creator, TaskStatus.IN_PROGRESS);
@@ -136,7 +139,7 @@ class TaskServiceTest {
 
     @Test
     void doesNotMoveTaskFromAnotherCreatorsProject() {
-        when(taskRepository.findByIdAndProject_CreatedByUser(22L, creator)).thenReturn(Optional.empty());
+        when(taskRepository.findById(22L)).thenReturn(Optional.empty());
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> taskService.updateStatus(22L, creator, TaskStatus.DONE));
@@ -150,7 +153,7 @@ class TaskServiceTest {
         project.setStatus(ProjectStatus.CLOSED);
         Task task = new Task();
         task.setProject(project);
-        when(taskRepository.findByIdAndProject_CreatedByUser(22L, creator)).thenReturn(Optional.of(task));
+        when(taskRepository.findById(22L)).thenReturn(Optional.of(task));
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> taskService.updateStatus(22L, creator, TaskStatus.DONE));

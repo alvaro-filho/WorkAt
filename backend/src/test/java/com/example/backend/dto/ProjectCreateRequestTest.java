@@ -2,7 +2,8 @@ package com.example.backend.dto;
 
 import com.example.backend.controllers.ProjectController;
 import com.example.backend.models.Project;
-import com.example.backend.models.ProjectCategory;
+import com.example.backend.models.ProjectRole;
+import com.example.backend.models.ProjectType;
 import com.example.backend.models.User;
 import com.example.backend.repositories.ProjectRepository;
 import com.example.backend.repositories.UserRepository;
@@ -35,7 +36,7 @@ class ProjectCreateRequestTest {
                   "name": "Campaign",
                   "slug": "campaign",
                   "description": "Description",
-                  "category": "ESTUDIO",
+                  "type": "CORPORATE",
                   "createdByUser": {"id": 7654321}
                 }
                 """;
@@ -50,14 +51,19 @@ class ProjectCreateRequestTest {
         ProjectRepository projectRepository = mock(ProjectRepository.class);
         when(projectRepository.save(any(Project.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
+        var memberRepository = mock(com.example.backend.repositories.ProjectMemberRepository.class);
         ProjectService projectService = new ProjectService(projectRepository,
                 mock(com.example.backend.repositories.TaskRepository.class),
-                mock(com.example.backend.repositories.ActivityEventRepository.class));
-        ProjectController controller = new ProjectController(projectService, userRepository);
+                mock(com.example.backend.repositories.ActivityEventRepository.class),
+                memberRepository,
+                mock(com.example.backend.repositories.ProjectInvitationRepository.class),
+                new com.example.backend.services.ProjectAccessService(projectRepository, memberRepository));
+        ProjectController controller = new ProjectController(projectService,
+                mock(com.example.backend.services.ProjectMembershipService.class), userRepository);
 
         var authentication = new UsernamePasswordAuthenticationToken(
                 "artist@example.test", null, List.of());
-        ResponseEntity<Project> response = controller.createProject(request, authentication);
+        ResponseEntity<ProjectResponse> response = controller.createProject(request, authentication);
 
         assertEquals(201, response.getStatusCode().value());
         org.mockito.ArgumentCaptor<Project> projectCaptor =
@@ -66,13 +72,14 @@ class ProjectCreateRequestTest {
         Project savedProject = projectCaptor.getValue();
 
         assertNotNull(response.getBody());
-        assertSame(savedProject, response.getBody());
+        assertEquals(ProjectRole.OWNER, response.getBody().myRole());
+        assertEquals(ProjectType.CORPORATE, response.getBody().type());
         assertNull(savedProject.getId());
         assertSame(authenticatedCreator, savedProject.getCreatedByUser());
         assertEquals("Campaign", savedProject.getName());
         assertEquals("campaign", savedProject.getSlug());
         assertEquals("Description", savedProject.getDescription());
-        assertEquals(ProjectCategory.ESTUDIO, savedProject.getCategory());
+        assertEquals(ProjectType.CORPORATE, savedProject.getType());
         verify(projectRepository, never()).findById(918273L);
     }
 }

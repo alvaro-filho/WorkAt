@@ -5,7 +5,6 @@ import com.example.backend.models.ActivityEvent;
 import com.example.backend.models.EventType;
 import com.example.backend.models.User;
 import com.example.backend.models.Project;
-import com.example.backend.repositories.ProjectRepository;
 import com.example.backend.repositories.ActivityEventRepository;
 import org.springframework.stereotype.Service;
 
@@ -25,11 +24,11 @@ import com.example.backend.dto.DeliveryTrendDTO;
 public class ActivityEventService {
 
     private final ActivityEventRepository activityEventRepository;
-    private final ProjectRepository projectRepository;
+    private final ProjectAccessService projectAccessService;
 
-    public ActivityEventService(ActivityEventRepository activityEventRepository, ProjectRepository projectRepository) {
+    public ActivityEventService(ActivityEventRepository activityEventRepository, ProjectAccessService projectAccessService) {
         this.activityEventRepository = activityEventRepository;
-        this.projectRepository = projectRepository;
+        this.projectAccessService = projectAccessService;
     }
 
     public ActivityEvent logEvent(User user, EventType type) {
@@ -42,9 +41,8 @@ public class ActivityEventService {
         event.setType(type);
         event.setTimestamp(LocalDateTime.now());
         if (projectId != null) {
-            Project project = projectRepository.findById(projectId)
-                    .filter(candidate -> candidate.getCreatedByUser().getId().equals(user.getId()))
-                    .orElseThrow(() -> new IllegalArgumentException("Projeto não pertence ao usuário autenticado."));
+            // Só registra atividade em projeto do qual o usuário participa (404 caso contrário).
+            Project project = projectAccessService.requireParticipant(projectId, user);
             event.setProject(project);
         }
         return activityEventRepository.save(event);

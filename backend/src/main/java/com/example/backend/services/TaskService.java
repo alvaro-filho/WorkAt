@@ -2,11 +2,9 @@ package com.example.backend.services;
 
 import com.example.backend.dto.TaskCreateRequest;
 import com.example.backend.models.Project;
-import com.example.backend.models.ProjectStatus;
 import com.example.backend.models.Task;
 import com.example.backend.models.TaskStatus;
 import com.example.backend.models.User;
-import com.example.backend.repositories.ProjectRepository;
 import com.example.backend.repositories.TaskRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -17,25 +15,27 @@ import java.util.List;
 
 @Service
 public class TaskService {
-    private final ProjectRepository projectRepository;
+
+    private final ProjectAccessService access;
     private final TaskRepository taskRepository;
 
-    public TaskService(ProjectRepository projectRepository, TaskRepository taskRepository) {
-        this.projectRepository = projectRepository;
+    public TaskService(ProjectAccessService access, TaskRepository taskRepository) {
+        this.access = access;
         this.taskRepository = taskRepository;
     }
 
     @Transactional
-    public Task createTask(Long projectId, User creator, TaskCreateRequest request) {
+    public Task createTask(Long projectId, User user, TaskCreateRequest request) {
         if (request.getTitle() == null || request.getTitle().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O título é obrigatório.");
         }
         if (request.getPriority() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A prioridade deve ser LOW, MEDIUM ou HIGH.");
         }
-        Project project = projectRepository.findByIdAndCreatedByUser(projectId, creator)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Projeto não encontrado."));
-        ensureProjectIsActive(project);
+
+        Project project = access.requireParticipant(projectId, user);
+        access.ensureCanManageTasks(project, user);
+        access.ensureActive(project);
 
         Task task = new Task();
         task.setTitle(request.getTitle().trim());
@@ -48,36 +48,34 @@ public class TaskService {
     }
 
     @Transactional(readOnly = true)
-    public List<Task> listTasks(Long projectId, User creator) {
-        Project project = projectRepository.findByIdAndCreatedByUser(projectId, creator)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Projeto não encontrado."));
+    public List<Task> listTasks(Long projectId, User user) {
+        Project project = access.requireParticipant(projectId, user);
         return taskRepository.findByProjectOrderByCreatedAtAsc(project);
     }
 
     @Transactional
-    public Task updateStatus(Long taskId, User creator, TaskStatus status) {
+    public Task updateStatus(Long taskId, User user, TaskStatus status) {
         if (status == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O status é obrigatório.");
         }
-        Task task = taskRepository.findByIdAndProject_CreatedByUser(taskId, creator)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarefa não encontrada."));
-        ensureProjectIsActive(task.getProject());
+        Task task = findTaskForParticipant(taskId, user);
+        access.ensureCanMoveTasks(task.getProject(), user);
+        access.ensureActive(task.getProject());
         task.setStatus(status);
         return taskRepository.save(task);
     }
 
     @Transactional
-    public void deleteTask(Long taskId, User creator) {
-        Task task = taskRepository.findByIdAndProject_CreatedByUser(taskId, creator)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarefa não encontrada."));
-        ensureProjectIsActive(task.getProject());
+    public void deleteTask(Long taskId, User user) {
+        Task task = findTaskForParticipant(taskId, user);
+        access.ensureCanManageTasks(task.getProject(), user);
+        access.ensureActive(task.getProject());
         taskRepository.delete(task);
     }
 
-    private void ensureProjectIsActive(Project project) {
-        if (project.getStatus() == ProjectStatus.CLOSED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Projeto encerrado. Retome o projeto para alterar tarefas.");
-        }
+    private Task findTaskForParticipant(Long taskId, User user) {
+        return taskRepository.findById(taskId)
+                .filter(task -> access.roleOf(task.getProject(), user).isPresent())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarefa não encontrada."));
     }
 }

@@ -1,7 +1,7 @@
 package com.example.backend.dto;
 
 import com.example.backend.models.Project;
-import com.example.backend.models.ProjectCategory;
+import com.example.backend.models.ProjectType;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
@@ -14,15 +14,15 @@ public class ProjectCreateRequest {
     private String name;
     private String slug;
     private String description;
-    private ProjectCategory category;
+    private ProjectType type;
 
     public Project toNewProject() {
         Project project = new Project();
         project.setName(name);
         project.setSlug(slug);
         project.setDescription(description);
-        if (category != null) {
-            project.setCategory(category);
+        if (type != null) {
+            project.setType(type);
         }
         return project;
     }
@@ -51,11 +51,11 @@ public class ProjectCreateRequest {
         this.description = description;
     }
 
-    public ProjectCategory getCategory() {
-        return category;
+    public ProjectType getType() {
+        return type;
     }
 
-    public void setCategory(ProjectCategory category) {
-        this.category = category;
+    public void setType(ProjectType type) {
+        this.type = type;
     }
 }

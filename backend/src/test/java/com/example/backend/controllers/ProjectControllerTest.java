@@ -4,6 +4,7 @@ import com.example.backend.models.Project;
 import com.example.backend.models.ProjectStatus;
 import com.example.backend.models.User;
 import com.example.backend.repositories.UserRepository;
+import com.example.backend.services.ProjectMembershipService;
 import com.example.backend.services.ProjectService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,7 @@ class ProjectControllerTest {
         UserRepository userRepository = mock(UserRepository.class);
         creator = new User();
         when(userRepository.findByEmail("owner@example.test")).thenReturn(Optional.of(creator));
-        mockMvc = MockMvcBuilders.standaloneSetup(new ProjectController(projectService, userRepository))
+        mockMvc = MockMvcBuilders.standaloneSetup(new ProjectController(projectService, mock(ProjectMembershipService.class), userRepository))
                 .setControllerAdvice(new ValidationExceptionHandler()).build();
     }
 
@@ -42,13 +43,15 @@ class ProjectControllerTest {
         project.setName("Site");
         project.setSlug("site");
         project.setStatus(ProjectStatus.CLOSED);
+        project.setCreatedByUser(creator);
         when(projectService.updateStatus(8L, creator, "CLOSED")).thenReturn(project);
 
         mockMvc.perform(patch("/api/v1/projects/8/status")
                         .principal(new UsernamePasswordAuthenticationToken("owner@example.test", null))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"CLOSED\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CLOSED"));
+                .andExpect(jsonPath("$.status").value("CLOSED"))
+                .andExpect(jsonPath("$.myRole").value("OWNER"));
     }
 
     @Test

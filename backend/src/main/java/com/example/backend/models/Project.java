@@ -21,9 +21,10 @@ public class Project {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    // O default no banco faz os projetos antigos virarem PERSONAL quando a coluna é criada.
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private ProjectCategory category = ProjectCategory.PESSOAL;
+    @Column(nullable = false, columnDefinition = "varchar(20) default 'PERSONAL'")
+    private ProjectType type = ProjectType.PERSONAL;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "varchar(20) default 'ACTIVE'")
@@ -75,12 +76,12 @@ public class Project {
         this.description = description;
     }
 
-    public ProjectCategory getCategory() {
-        return category;
+    public ProjectType getType() {
+        return type;
     }
 
-    public void setCategory(ProjectCategory category) {
-        this.category = category;
+    public void setType(ProjectType type) {
+        this.type = type;
     }
 
     public ProjectStatus getStatus() {

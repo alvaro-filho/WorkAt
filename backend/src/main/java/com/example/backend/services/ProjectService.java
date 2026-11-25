@@ -1,9 +1,12 @@
 package com.example.backend.services;
 
 import com.example.backend.models.Project;
+import com.example.backend.models.ProjectMember;
 import com.example.backend.models.ProjectStatus;
 import com.example.backend.models.User;
 import com.example.backend.repositories.ActivityEventRepository;
+import com.example.backend.repositories.ProjectInvitationRepository;
+import com.example.backend.repositories.ProjectMemberRepository;
 import com.example.backend.repositories.ProjectRepository;
 import com.example.backend.repositories.TaskRepository;
 import org.springframework.http.HttpStatus;
@@ -11,11 +14,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
 /**
- * Serviço de negócio para gerenciamento de projetos (RF005).
+ * Serviço de negócio para gerenciamento de projetos.
+ * A autorização por participação fica no {@link ProjectAccessService}.
  */
 @Service
 public class ProjectService {
@@ -23,92 +29,80 @@ public class ProjectService {
     private final ProjectRepository projectRepository;
     private final TaskRepository taskRepository;
     private final ActivityEventRepository activityEventRepository;
-    // Poderíamos injetar o UserRepository aqui para associar o criador do projeto.
-    // private final UserRepository userRepository; 
+    private final ProjectMemberRepository memberRepository;
+    private final ProjectInvitationRepository invitationRepository;
+    private final ProjectAccessService access;
 
     public ProjectService(ProjectRepository projectRepository, TaskRepository taskRepository,
-                          ActivityEventRepository activityEventRepository) {
+                          ActivityEventRepository activityEventRepository,
+                          ProjectMemberRepository memberRepository,
+                          ProjectInvitationRepository invitationRepository,
+                          ProjectAccessService access) {
         this.projectRepository = projectRepository;
         this.taskRepository = taskRepository;
         this.activityEventRepository = activityEventRepository;
+        this.memberRepository = memberRepository;
+        this.invitationRepository = invitationRepository;
+        this.access = access;
     }
 
-    /**
-     * Lista todos os projetos existentes no sistema.
-     * Este método será o ponto de entrada principal para o Dashboard.
-     * @return Uma lista de todos os projetos.
-     */
-    @Transactional(readOnly = true)
-    public List<Project> findAllProjects() {
-        // Retorna todos os projetos, ou uma lista vazia se não houver nenhum.
-        return projectRepository.findAll();
-    }
-
+    /** Projetos em que o usuário participa: os que ele criou e os em que é membro. */
     @Transactional(readOnly = true)
     public List<Project> findProjectsForUser(User user) {
-        return projectRepository.findByCreatedByUser(user);
+        Map<Long, Project> byId = new LinkedHashMap<>();
+        for (Project project : projectRepository.findByCreatedByUser(user)) {
+            byId.put(project.getId(), project);
+        }
+        for (ProjectMember membership : memberRepository.findByUser(user)) {
+            byId.putIfAbsent(membership.getProject().getId(), membership.getProject());
+        }
+        return byId.values().stream()
+                .sorted(Comparator.comparing(Project::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
     }
 
-    /**
-     * Busca um projeto específico pelo seu ID.
-     * @param projectId O ID do projeto.
-     * @return Um Optional contendo o projeto, se existir.
-     */
     @Transactional(readOnly = true)
-    public Optional<Project> findProjectById(Long projectId) {
-        return projectRepository.findById(projectId);
+    public Project findProjectForParticipant(Long projectId, User user) {
+        return access.requireParticipant(projectId, user);
     }
 
-    /**
-     * Temporary access rule until ProjectMember is implemented: only the creator can read the project.
-     */
-    @Transactional(readOnly = true)
-    public Optional<Project> findProjectByIdForCreator(Long projectId, User creator) {
-        return projectRepository.findByIdAndCreatedByUser(projectId, creator);
-    }
-
-    /**
-     * Cria um novo projeto no sistema.
-     * @param project Os dados do projeto a ser criado.
-     * @param creator O usuário que está criando o projeto.
-     * @return O projeto salvo com seu ID gerado.
-     */
     @Transactional
     public Project createProject(Project project, User creator) {
-        // Configura o usuário criador antes de salvar
         project.setCreatedByUser(creator);
-        // É crucial garantir que o slug seja único ou gerado corretamente.
-        // Aqui assumimos que o serviço de criação de slug é tratado ou que o input é limpo.
-        
         return projectRepository.save(project);
     }
 
     @Transactional
-    public Project updateStatus(Long projectId, User creator, String requestedStatus) {
-        Project project = projectRepository.findByIdAndCreatedByUser(projectId, creator)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Projeto não encontrado."));
+    public Project updateStatus(Long projectId, User user, String requestedStatus) {
+        Project project = access.requireOwner(projectId, user);
+
         if (requestedStatus == null || requestedStatus.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O status é obrigatório. Use ACTIVE ou CLOSED.");
         }
+
         ProjectStatus status;
         try {
             status = ProjectStatus.valueOf(requestedStatus);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status inválido. Use ACTIVE ou CLOSED.");
         }
+
         project.setStatus(status);
         return projectRepository.save(project);
     }
 
     @Transactional
-    public void deleteProject(Long projectId, User creator) {
-        Project project = projectRepository.findByIdAndCreatedByUser(projectId, creator)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Projeto não encontrado."));
+    public void deleteProject(Long projectId, User user) {
+        Project project = access.requireOwner(projectId, user);
+
         if (project.getStatus() != ProjectStatus.CLOSED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Encerre o projeto antes de apagá-lo.");
         }
+
         activityEventRepository.deleteByProject(project);
         taskRepository.deleteByProject(project);
+        invitationRepository.deleteByProject(project);
+        memberRepository.deleteByProject(project);
         projectRepository.delete(project);
     }
 }
