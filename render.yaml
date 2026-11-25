@@ -5,6 +5,8 @@ services:
     name: workat-api
     runtime: docker
     plan: free
+    # Região mais próxima do banco no Neon (AWS US East, N. Virginia): cada consulta fica rápida.
+    region: virginia
     rootDir: backend
     dockerfilePath: ./Dockerfile
     branch: master
