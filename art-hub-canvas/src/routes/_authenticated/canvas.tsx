@@ -1,81 +1,179 @@
-import { useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 
+import { InfiniteCanvas, type CanvasItem } from "@/components/canvas/InfiniteCanvas";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { InfiniteCanvas } from "@/components/canvas/InfiniteCanvas";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { TASKS } from "@/lib/atelie-data";
+import { logActivity } from "@/lib/activity-api";
+import { api, type ApiTask, type Project } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
+import { canWorkOnTask } from "@/lib/project-labels";
 
+// Cada tarefa tem o seu Canvas (aberto pelo botão na tela da tarefa), salvo no servidor.
+// O Canvas global do projeto e a sincronização em tempo real ficam como trabalho futuro.
 export const Route = createFileRoute("/_authenticated/canvas")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    task: typeof search["task"] === "string" ? search["task"] : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): { task?: number } => {
+    const raw = search["task"];
+    const task = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+    return Number.isInteger(task) && task > 0 ? { task } : {};
+  },
   head: () => ({
     meta: [
-      { title: "Canvas Infinito — Ateliê Studio" },
+      { title: "Canvas Infinito — WorkAt" },
       {
         name: "description",
-        content:
-          "Moodboard infinito com notas adesivas, referências e vetores para cada tarefa do projeto.",
-      },
-      { property: "og:title", content: "Canvas Infinito — Ateliê Studio" },
-      {
-        property: "og:description",
-        content:
-          "Colaboração visual em canvas macro do projeto ou no canvas de uma tarefa específica.",
+        content: "Painel infinito de referências de cada tarefa, estilo PureRef.",
       },
     ],
   }),
   component: CanvasPage,
 });
 
-function CanvasPage() {
-  const { task } = Route.useSearch();
-  const navigate = useNavigate({ from: "/canvas" });
-  const [value, setValue] = useState<string>(task ?? "macro");
+type SaveState = "idle" | "pending" | "saving" | "saved" | "error";
 
-  const selected = TASKS.find((t) => t.id === value);
-  const label = selected
-    ? `Canvas da Tarefa: ${selected.title}`
-    : "Canvas Macro do Projeto (Moodboard Geral)";
+function parseItems(content: string): CanvasItem[] {
+  try {
+    const parsed: unknown = JSON.parse(content);
+    return Array.isArray(parsed) ? (parsed as CanvasItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function CanvasPage() {
+  const { task: taskId } = Route.useSearch();
+  const { user } = useAuth();
+  const [task, setTask] = useState<ApiTask | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
+  const [items, setItems] = useState<CanvasItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loggedActivity = useRef(false);
+
+  useEffect(() => {
+    if (taskId === undefined) return;
+    let active = true;
+    (async () => {
+      try {
+        const loadedTask = await api.task(taskId);
+        const [loadedProject, canvas] = await Promise.all([
+          api.project(loadedTask.projectId),
+          api.taskCanvas(taskId),
+        ]);
+        if (!active) return;
+        setTask(loadedTask);
+        setProject(loadedProject);
+        setItems(parseItems(canvas.content));
+      } catch (e) {
+        if (active) setError(e instanceof Error ? e.message : "Tarefa não encontrada.");
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [taskId]);
+
+  const save = useCallback(
+    async (next: CanvasItem[]) => {
+      if (taskId === undefined) return;
+      setSaveState("saving");
+      try {
+        await api.saveTaskCanvas(taskId, JSON.stringify(next));
+        setSaveState("saved");
+        setSaveError(null);
+        if (!loggedActivity.current && project) {
+          logActivity("CANVAS_EDIT", project.id);
+          loggedActivity.current = true;
+        }
+      } catch (e) {
+        setSaveState("error");
+        setSaveError(e instanceof Error ? e.message : "Não foi possível salvar o Canvas.");
+      }
+    },
+    [taskId, project],
+  );
+
+  // Salva um instante depois da última mudança (evita uma requisição por pixel arrastado).
+  const handleChange = (next: CanvasItem[]) => {
+    setItems(next);
+    setSaveState("pending");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => void save(next), 800);
+  };
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  if (taskId === undefined) {
+    return (
+      <AppLayout title="Canvas Infinito" subtitle="Referências por tarefa">
+        <div className="glass rounded-2xl p-8 text-center">
+          <p className="font-medium">O Canvas fica dentro de cada tarefa.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Abra um projeto, entre em uma tarefa e use o botão “Abrir Canvas infinito”.
+          </p>
+          <Link to="/projetos" className="mt-4 inline-block text-sm text-primary hover:underline">
+            Ir para Projetos
+          </Link>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const canEdit = Boolean(task && project && canWorkOnTask(project, task, user?.id));
+  const statusText =
+    saveState === "pending" || saveState === "saving"
+      ? "Salvando..."
+      : saveState === "saved"
+        ? "Salvo"
+        : saveState === "error"
+          ? (saveError ?? "Erro ao salvar")
+          : !canEdit && task
+            ? "Somente leitura"
+            : undefined;
 
   return (
-    <AppLayout title="Canvas Infinito" subtitle="Colaboração visual em tempo real">
+    <AppLayout title="Canvas Infinito" subtitle={task ? task.title : "Carregando tarefa..."}>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Select
-          value={value}
-          onValueChange={(v) => {
-            setValue(v);
-            navigate({ search: { task: v === "macro" ? undefined : v } });
-          }}
-        >
-          <SelectTrigger className="glass w-80">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="macro">Canvas Macro do Projeto</SelectItem>
-            {TASKS.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                Canvas da Tarefa: {t.title}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {selected && (
+        {task && (
+          <Link
+            to="/projetos/$projectId/tarefas/$taskId"
+            params={{ projectId: String(task.projectId), taskId: String(task.id) }}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-3" /> Voltar para a tarefa
+          </Link>
+        )}
+        {task?.deadline && (
           <Badge variant="outline" className="border-neon/50 text-neon">
-            Prazo {selected.deadline} · {selected.client}
+            Prazo {new Date(`${task.deadline}T00:00:00`).toLocaleDateString("pt-BR")}
           </Badge>
         )}
       </div>
-
-      <InfiniteCanvas contextLabel={label} />
+      {error ? (
+        <div role="alert" className="glass rounded-2xl p-4 text-sm text-destructive">
+          {error}
+        </div>
+      ) : items === null || !task ? (
+        <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
+          Carregando Canvas...
+        </div>
+      ) : (
+        <InfiniteCanvas
+          contextLabel={`Canvas da tarefa: ${task.title}`}
+          items={items}
+          canEdit={canEdit}
+          onChange={handleChange}
+          statusText={statusText}
+        />
+      )}
     </AppLayout>
   );
 }

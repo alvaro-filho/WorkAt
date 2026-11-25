@@ -1,10 +1,6 @@
-export type ActivityEventType =
-  | "TASK_COMPLETED"
-  | "TASK_REVIEWED"
-  | "CANVAS_EDIT"
-  | "FILE_UPLOAD";
+export type ActivityEventType = "TASK_COMPLETED" | "TASK_REVIEWED" | "CANVAS_EDIT" | "FILE_UPLOAD";
 
-const API_URL = "http://localhost:8080/api/v1/activity";
+const API_URL = "/api/v1/activity";
 
 function getAuthHeaders(): HeadersInit {
   const token = typeof window === "undefined" ? null : localStorage.getItem("authToken");
@@ -25,7 +21,7 @@ export async function fetchActivityHeatmap(): Promise<Array<{ date: string; coun
   return (await response.json()) as Array<{ date: string; count: number }>;
 }
 
-export function logActivity(type: ActivityEventType): void {
+export function logActivity(type: ActivityEventType, projectId?: number): void {
   if (typeof window === "undefined") return;
 
   void fetch(API_URL, {
@@ -34,8 +30,14 @@ export function logActivity(type: ActivityEventType): void {
       ...getAuthHeaders(),
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ type }),
+    body: JSON.stringify(projectId ? { type, projectId } : { type }),
   }).catch((error) => {
     console.warn("Não foi possível registrar a atividade.", error);
   });
+}
+
+/** Registra no gráfico de atividade a mudança de status relevante (revisão ou conclusão). */
+export function logStatusActivity(status: string, projectId: number): void {
+  if (status === "DONE") logActivity("TASK_COMPLETED", projectId);
+  else if (status === "REVIEW") logActivity("TASK_REVIEWED", projectId);
 }

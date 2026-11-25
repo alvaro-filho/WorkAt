@@ -44,7 +44,7 @@ public class SecurityConfig {
                             "http://127.0.0.1:[*]"
                         ));
                     // Permite todos os métodos e headers
-                    configuration.setAllowedMethods(java.util.Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+                    configuration.setAllowedMethods(java.util.Arrays.asList("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
                     configuration.setAllowedHeaders(java.util.Arrays.asList("*"));
                     configuration.setAllowCredentials(true);
                     return configuration;
@@ -56,6 +56,9 @@ public class SecurityConfig {
                     // Permitir acesso não autenticado especificamente no login e em todos os endpoints de auth
                     .requestMatchers("/api/v1/auth/login").permitAll()
                     .requestMatchers("/api/v1/auth/**").permitAll()
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/showcase/public").permitAll()
+                    // Imagem de arte liberada é pública; o serviço confere o status e barra as travadas.
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/showcase/*/image").permitAll()
                     // Todas as outras requisições exigem autenticação
                     .anyRequest().authenticated()
             )

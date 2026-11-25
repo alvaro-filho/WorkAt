@@ -2,7 +2,15 @@ import { useMemo } from "react";
 
 const WEEKS = 26;
 const DAYS = 7;
-const LABELS = ["Abr", "Mai", "Jun", "Jul", "Ago", "Set"];
+// Rótulos dos últimos 6 meses até o mês atual (antes eram fixos de abril a setembro).
+function monthLabels() {
+  const now = new Date();
+  return Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
+    const label = date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  });
+}
 
 function levelColor(level: number) {
   const opacity = [0.06, 0.25, 0.45, 0.7, 1][level] ?? 0.06;
@@ -70,7 +78,7 @@ export function ActivityHeatmap({ data }: { data: Record<string, number> }) {
           ))}
         </div>
         <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-          {LABELS.map((m) => (
+          {monthLabels().map((m) => (
             <span key={m}>{m}</span>
           ))}
         </div>

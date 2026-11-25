@@ -11,13 +11,13 @@ import { useAuth } from "@/lib/AuthContext";
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "Entrar — Ateliê Studio" },
+      { title: "Entrar — WorkAt" },
       {
         name: "description",
         content:
-          "Acesse o Ateliê Studio: gestão de produção artística, colaboração visual em canvas e vitrine com controle de NDA.",
+          "Acesse o WorkAt: gestão de produção artística, colaboração visual em canvas e vitrine com controle de NDA.",
       },
-      { property: "og:title", content: "Entrar — Ateliê Studio" },
+      { property: "og:title", content: "Entrar — WorkAt" },
       {
         property: "og:description",
         content: "Plataforma de gestão de produção artística para artistas e estúdios.",
@@ -71,7 +71,7 @@ function LoginPage() {
             <Palette className="size-6 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold">Ateliê Studio</h1>
+            <h1 className="text-lg font-semibold">WorkAt</h1>
             <p className="text-xs text-muted-foreground">Produção artística, colaboração e NDA</p>
           </div>
         </div>

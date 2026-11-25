@@ -21,9 +21,22 @@ public class Project {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    // O default no banco faz os projetos antigos virarem PERSONAL quando a coluna é criada.
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private ProjectCategory category = ProjectCategory.PESSOAL;
+    @Column(nullable = false, columnDefinition = "varchar(20) default 'PERSONAL'")
+    private ProjectType type = ProjectType.PERSONAL;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, columnDefinition = "varchar(20) default 'ACTIVE'")
+    private ProjectStatus status = ProjectStatus.ACTIVE;
+
+    // Só vale no corporativo: se true, contratados veem todas as tarefas, e não só as atribuídas a eles.
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean contractorsSeeAllTasks = false;
+
+    // Só vale no corporativo: com NDA ligado, as artes enviadas à vitrine nascem travadas e só o dono libera.
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean ndaEnabled = false;
 
     // Relacionamento opcional com o Criador do Projeto (usuário)
     @ManyToOne(fetch = FetchType.LAZY)
@@ -71,12 +84,36 @@ public class Project {
         this.description = description;
     }
 
-    public ProjectCategory getCategory() {
-        return category;
+    public ProjectType getType() {
+        return type;
     }
 
-    public void setCategory(ProjectCategory category) {
-        this.category = category;
+    public void setType(ProjectType type) {
+        this.type = type;
+    }
+
+    public ProjectStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(ProjectStatus status) {
+        this.status = status;
+    }
+
+    public boolean isContractorsSeeAllTasks() {
+        return contractorsSeeAllTasks;
+    }
+
+    public void setContractorsSeeAllTasks(boolean contractorsSeeAllTasks) {
+        this.contractorsSeeAllTasks = contractorsSeeAllTasks;
+    }
+
+    public boolean isNdaEnabled() {
+        return ndaEnabled;
+    }
+
+    public void setNdaEnabled(boolean ndaEnabled) {
+        this.ndaEnabled = ndaEnabled;
     }
 
     public User getCreatedByUser() {

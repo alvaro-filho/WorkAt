@@ -1,4 +1,4 @@
-# Art Hub Canvas
+# WorkAt — frontend
 
 Crie a interface completa de um sistema SaaS chamado "Ateliê Studio" - Plataforma de Gestão de Produção Artística, Colaboração Visual e Vitrine NDA.
 

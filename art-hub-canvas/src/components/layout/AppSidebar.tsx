@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, KanbanSquare, Frame, GalleryVerticalEnd, Palette, LogOut } from "lucide-react";
+import { Compass, FolderKanban, LogOut, Palette, UserRound } from "lucide-react";
 
 import {
   Sidebar,
@@ -17,19 +17,21 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/lib/AuthContext";
 
-const items = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Kanban & Timeline", url: "/kanban", icon: KanbanSquare },
-  { title: "Canvas Infinito", url: "/canvas", icon: Frame },
-  { title: "Vitrine & NDA", url: "/showcase", icon: GalleryVerticalEnd },
-] as const;
+// O Kanban e o Canvas vivem dentro de cada projeto/tarefa, não na navegação global.
 
 export function AppSidebar() {
   const { state } = useSidebar();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  // Estilo GitHub: o perfil é a página inicial; o Kanban e o Canvas vivem dentro dos projetos.
+  const profileUrl = user ? `/u/${user.username}` : "/dashboard";
+  const items = [
+    { title: "Meu perfil", url: profileUrl, icon: UserRound },
+    { title: "Projetos", url: "/projetos", icon: FolderKanban },
+    { title: "Explorar", url: "/explorar", icon: Compass },
+  ];
 
   const handleLogout = () => {
     logout();
@@ -45,8 +47,8 @@ export function AppSidebar() {
           </div>
           {!collapsed && (
             <div className="leading-tight">
-              <p className="text-sm font-semibold">Ateliê Studio</p>
-              <p className="text-xs text-muted-foreground">Gestão de produção</p>
+              <p className="text-sm font-semibold">WorkAt</p>
+              <p className="text-xs text-muted-foreground">Portfólio e produção</p>
             </div>
           )}
         </div>
@@ -59,7 +61,11 @@ export function AppSidebar() {
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={pathname === item.url} tooltip={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === item.url || pathname.startsWith(`${item.url}/`)}
+                    tooltip={item.title}
+                  >
                     <Link to={item.url} className="flex items-center gap-2">
                       <item.icon className="size-4" />
                       <span>{item.title}</span>
@@ -75,12 +81,23 @@ export function AppSidebar() {
       <SidebarFooter className="gap-2 p-3">
         <div className="glass flex items-center gap-3 rounded-xl p-2">
           <Avatar className="size-8">
-            <AvatarFallback className="bg-primary/20 text-xs text-foreground">MR</AvatarFallback>
+            <AvatarFallback className="bg-primary/20 text-xs text-foreground">
+              {(user?.fullName ?? user?.username ?? "?")
+                .split(/\s+/)
+                .map((part) => part[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase()}
+            </AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="min-w-0 flex-1 leading-tight">
-              <p className="truncate text-sm font-medium">Marina Rocha</p>
-              <p className="truncate text-xs text-muted-foreground">Artista / Freelancer</p>
+              <p className="truncate text-sm font-medium">
+                {user?.fullName ?? user?.username ?? "Usuário"}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {user?.role === "COMPANY" ? "Empresa / Estúdio" : "Artista / Freelancer"}
+              </p>
             </div>
           )}
           {!collapsed && (
