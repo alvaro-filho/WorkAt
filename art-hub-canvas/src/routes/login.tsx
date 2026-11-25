@@ -15,7 +15,7 @@ export const Route = createFileRoute("/login")({
       {
         name: "description",
         content:
-          "Acesse o WorkAt: gestão de produção artística, colaboração visual em canvas e vitrine com controle de NDA.",
+          "Acesse o WorkAt: gestão de produção artística, colaboração visual em canvas e portfólio com WIPs publicados.",
       },
       { property: "og:title", content: "Entrar — WorkAt" },
       {

@@ -56,9 +56,10 @@ public class SecurityConfig {
                     // Permitir acesso não autenticado especificamente no login e em todos os endpoints de auth
                     .requestMatchers("/api/v1/auth/login").permitAll()
                     .requestMatchers("/api/v1/auth/**").permitAll()
-                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/showcase/public").permitAll()
-                    // Imagem de arte liberada é pública; o serviço confere o status e barra as travadas.
-                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/showcase/*/image").permitAll()
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/feed", "/api/v1/showcase/public").permitAll()
+                    // Imagem de publicação pública não exige login; o serviço confere a visibilidade e barra as outras.
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/posts/*/images/*").permitAll()
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/projects/*/public/files/*").permitAll()
                     // Todas as outras requisições exigem autenticação
                     .anyRequest().authenticated()
             )

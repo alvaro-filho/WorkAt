@@ -46,7 +46,8 @@ class ProjectAccessRulesTest {
         ProjectAccessService access = new ProjectAccessService(projectRepository, memberRepository);
         taskService = new TaskService(access, taskRepository, mock(TaskFileService.class));
         projectService = new ProjectService(projectRepository, taskRepository, mock(ActivityEventRepository.class),
-                memberRepository, mock(ProjectInvitationRepository.class), access, mock(TaskFileService.class));
+                memberRepository, mock(ProjectInvitationRepository.class), access, mock(TaskFileService.class),
+                mock(PostService.class));
 
         owner = user(1L);
         member = user(2L);

@@ -4,7 +4,6 @@ import com.example.backend.models.Project;
 import com.example.backend.models.Task;
 import com.example.backend.models.TaskFile;
 import com.example.backend.models.User;
-import com.example.backend.repositories.ShowcaseArtRepository;
 import com.example.backend.repositories.TaskFileRepository;
 import com.example.backend.repositories.TaskRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -58,19 +57,19 @@ public class TaskFileService {
     private final ProjectAccessService access;
     private final TaskRepository taskRepository;
     private final TaskFileRepository fileRepository;
-    private final ShowcaseArtRepository showcaseArtRepository;
+    private final PostService postService;
     private final Path storageDir;
     private final long maxBytes;
 
     public TaskFileService(ProjectAccessService access, TaskRepository taskRepository,
                            TaskFileRepository fileRepository,
-                           ShowcaseArtRepository showcaseArtRepository,
+                           PostService postService,
                            @Value("${app.storage.dir:uploads}") String storageDir,
                            @Value("${app.storage.max-file-size-mb:500}") long maxFileSizeMb) {
         this.access = access;
         this.taskRepository = taskRepository;
         this.fileRepository = fileRepository;
-        this.showcaseArtRepository = showcaseArtRepository;
+        this.postService = postService;
         this.storageDir = Path.of(storageDir).toAbsolutePath().normalize();
         this.maxBytes = maxFileSizeMb * 1024 * 1024;
     }
@@ -130,7 +129,9 @@ public class TaskFileService {
         taskFile.setSizeBytes(file.getSize());
         taskFile.setVersion((int) fileRepository.countByTask(task) + 1);
         taskFile.setFinalImage(markAsFinal);
-        return fileRepository.save(taskFile);
+        TaskFile saved = fileRepository.save(taskFile);
+        postService.recordWip(saved);
+        return saved;
     }
 
     /** Arquivo e caminho no disco, para download. Só para quem pode ver a tarefa. */
@@ -168,10 +169,7 @@ public class TaskFileService {
                     "Só quem enviou ou o dono do projeto pode apagar o arquivo.");
         }
         access.ensureActive(project);
-        if (showcaseArtRepository.existsBySourceFile(file)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Esta imagem foi enviada para a vitrine. Envie outra imagem final antes de apagá-la.");
-        }
+        postService.detachTaskFiles(List.of(file));
         removeFromDisk(file);
         fileRepository.delete(file);
     }
@@ -179,8 +177,9 @@ public class TaskFileService {
     /** Usado ao apagar a tarefa (a permissão já foi checada por quem chama). */
     @Transactional
     public void deleteAllForTask(Task task) {
-        showcaseArtRepository.deleteAll(showcaseArtRepository.findByTask(task));
+        postService.deleteAllForTask(task);
         List<TaskFile> files = fileRepository.findByTaskOrderByVersionDesc(task);
+        postService.detachTaskFiles(files);
         files.forEach(this::removeFromDisk);
         fileRepository.deleteAll(files);
     }
@@ -188,13 +187,14 @@ public class TaskFileService {
     /** Usado ao apagar o projeto (a permissão já foi checada por quem chama). */
     @Transactional
     public void deleteAllForProject(Project project) {
-        showcaseArtRepository.deleteAll(showcaseArtRepository.findByProject(project));
+        postService.deleteAllForProject(project);
         List<TaskFile> files = fileRepository.findByTask_Project(project);
+        postService.detachTaskFiles(files);
         files.forEach(this::removeFromDisk);
         fileRepository.deleteAll(files);
     }
 
-    /** Caminho no disco de um arquivo já autorizado por quem chama (ex.: imagem pública da vitrine). */
+    /** Caminho no disco de um arquivo já autorizado por quem chama (ex.: imagem de uma publicação). */
     public Path pathOf(TaskFile file) {
         return resolveStored(file.getStoredName());
     }

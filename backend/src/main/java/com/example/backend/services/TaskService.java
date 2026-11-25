@@ -88,6 +88,15 @@ public class TaskService {
         return taskRepository.save(task);
     }
 
+    /** Tarefa interna: fica fora da visão pública e não gera WIP. Quem pode criar tarefas decide. */
+    @Transactional
+    public Task setHiddenFromPublic(Long taskId, User user, boolean hidden) {
+        Task task = findVisibleTask(taskId, user);
+        access.ensureCanManageTasks(task.getProject(), user);
+        task.setHiddenFromPublic(hidden);
+        return taskRepository.save(task);
+    }
+
     @Transactional
     public void deleteTask(Long taskId, User user) {
         Task task = findVisibleTask(taskId, user);

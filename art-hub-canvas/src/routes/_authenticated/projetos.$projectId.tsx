@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, LogOut, Mail, UserMinus } from "lucide-react";
+import { ArrowLeft, Eye, Globe, Lock, LogOut, Mail, UserMinus } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { GanttView } from "@/components/kanban/GanttView";
-import { ArtImage, ArtStatusBadge, ReviewDialog } from "@/components/art/ArtPieces";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import {
   AlertDialog,
@@ -31,7 +30,6 @@ import {
   type Project,
   type ProjectInvitation,
   type ProjectMember,
-  type ShowcaseArt,
 } from "@/lib/api";
 import { logStatusActivity } from "@/lib/activity-api";
 import { useAuth } from "@/lib/AuthContext";
@@ -177,6 +175,7 @@ function ProjectPage() {
                 Encerrado
               </Badge>
             )}
+            <VisibilityBadge project={project} />
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {project.description || "Sem descrição."}
@@ -187,6 +186,11 @@ function ProjectPage() {
             </p>
           )}
         </div>
+        <Button asChild variant="outline" size="sm" className="shrink-0">
+          <Link to="/projetos/$projectId/publico" params={{ projectId: String(project.id) }}>
+            <Eye className="mr-1 size-4" /> Ver como público
+          </Link>
+        </Button>
       </header>
 
       {error && (
@@ -200,7 +204,6 @@ function ProjectPage() {
           <TabsTrigger value="quadro">Quadro</TabsTrigger>
           <TabsTrigger value="cronograma">Cronograma</TabsTrigger>
           {permissions.hasMembers && <TabsTrigger value="membros">Membros</TabsTrigger>}
-          <TabsTrigger value="vitrine">Vitrine</TabsTrigger>
           {permissions.owner && <TabsTrigger value="config">Configurações</TabsTrigger>}
         </TabsList>
 
@@ -240,10 +243,6 @@ function ProjectPage() {
             <MembersTab project={project} />
           </TabsContent>
         )}
-
-        <TabsContent value="vitrine" className="mt-4">
-          <ShowcaseTab project={project} />
-        </TabsContent>
 
         {permissions.owner && (
           <TabsContent value="config" className="mt-4">
@@ -512,6 +511,8 @@ function SettingsTab({
   const saveSetting = async (payload: {
     contractorsSeeAllTasks?: boolean;
     ndaEnabled?: boolean;
+    autoWip?: boolean;
+    ndaReleaseDate?: string;
   }) => {
     setBusy(true);
     setError(null);
@@ -564,6 +565,29 @@ function SettingsTab({
           </Button>
         )}
       </div>
+      <div className="flex items-start justify-between gap-4 border-t border-border pt-4">
+        <div>
+          <Label htmlFor="autoWip" className="text-sm font-semibold">
+            WIP automático (projeto público)
+          </Label>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Ligado: o projeto aparece no portfólio de quem participa, qualquer pessoa vê a visão
+            pública (as tarefas como título, descrição e imagens) e cada imagem enviada numa tarefa
+            vira um WIP no feed Publicações. Desligado: só os participantes veem o projeto.
+          </p>
+          {project.autoWip && project.ndaActive && (
+            <p className="mt-2 text-sm text-amber-300">
+              O NDA ainda está ativo: nada aparece em público até a data de liberação.
+            </p>
+          )}
+        </div>
+        <Switch
+          id="autoWip"
+          checked={project.autoWip}
+          disabled={busy}
+          onCheckedChange={(checked) => void saveSetting({ autoWip: checked })}
+        />
+      </div>
       {project.type === "CORPORATE" && (
         <div className="flex items-start justify-between gap-4 border-t border-border pt-4">
           <div>
@@ -590,9 +614,8 @@ function SettingsTab({
               Projeto sob NDA
             </Label>
             <p className="mt-1 text-sm text-muted-foreground">
-              Ligado: as artes enviadas à vitrine ficam travadas até você liberar na aba Vitrine, e
-              o projeto aparece mascarado no perfil dos contratados. Desligado: as artes são
-              publicadas direto.
+              Ligado: nada do projeto é publicado (nem WIP, nem post) até a data de liberação, e o
+              projeto aparece mascarado no perfil dos contratados.
             </p>
           </div>
           <Switch
@@ -601,6 +624,37 @@ function SettingsTab({
             disabled={busy}
             onCheckedChange={(checked) => void saveSetting({ ndaEnabled: checked })}
           />
+        </div>
+      )}
+      {project.type === "CORPORATE" && project.ndaEnabled && (
+        <div className="space-y-2 border-t border-border pt-4">
+          <Label htmlFor="ndaReleaseDate" className="text-sm font-semibold">
+            Data de liberação do NDA
+          </Label>
+          <p className="text-sm text-muted-foreground">
+            A partir desta data o NDA deixa de valer: o projeto pode ficar público (com o WIP
+            automático) e as imagens podem ser publicadas. Sem data, o NDA vale até você mudar.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              id="ndaReleaseDate"
+              type="date"
+              className="w-auto"
+              value={project.ndaReleaseDate ?? ""}
+              disabled={busy}
+              onChange={(e) => void saveSetting({ ndaReleaseDate: e.target.value })}
+            />
+            {project.ndaReleaseDate && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => void saveSetting({ ndaReleaseDate: "" })}
+              >
+                Tirar a data
+              </Button>
+            )}
+          </div>
         </div>
       )}
       {error && (
@@ -652,115 +706,28 @@ function SettingsTab({
   );
 }
 
-/**
- * Artes do projeto na vitrine. O dono do projeto (parte contratante) libera ou recusa as travadas por NDA;
- * os membros acompanham a situação das suas.
- */
-function ShowcaseTab({ project }: { project: Project }) {
-  const owner = project.myRole === "OWNER";
-  const [arts, setArts] = useState<ShowcaseArt[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [review, setReview] = useState<{ art: ShowcaseArt; mode: "approve" | "reject" } | null>(
-    null,
-  );
-
-  useEffect(() => {
-    api
-      .projectShowcase(project.id)
-      .then(setArts)
-      .catch((e: unknown) =>
-        setError(
-          e instanceof Error ? e.message : "Não foi possível carregar a vitrine do projeto.",
-        ),
-      );
-  }, [project.id]);
-
-  const pending = (arts ?? []).filter(
-    (art) => art.ndaStatus === "LOCKED_BY_NDA" && !art.reviewNote,
-  );
-
+/** Quem pode ver o projeto agora: público, privado ou sob NDA. */
+function VisibilityBadge({ project }: { project: Project }) {
+  if (project.ndaActive) {
+    return (
+      <Badge variant="outline" className="border-amber-500/50 text-amber-300">
+        <Lock className="mr-1 size-3" />
+        {project.ndaReleaseDate
+          ? `NDA até ${new Date(`${project.ndaReleaseDate}T00:00:00`).toLocaleDateString("pt-BR")}`
+          : "NDA"}
+      </Badge>
+    );
+  }
+  if (project.publiclyVisible) {
+    return (
+      <Badge variant="outline" className="border-neon/50 text-neon">
+        <Globe className="mr-1 size-3" /> Público · WIP automático
+      </Badge>
+    );
+  }
   return (
-    <div className="space-y-4">
-      <div className="glass rounded-2xl p-4 text-sm text-muted-foreground">
-        {project.type === "CORPORATE" && project.ndaEnabled
-          ? owner
-            ? `Projeto sob NDA: as artes enviadas pelos contratados esperam a sua liberação. ${pending.length} aguardando.`
-            : "Projeto sob NDA: suas artes só aparecem no seu portfólio depois que o contratante liberar."
-          : "Sem NDA: as artes enviadas a partir da imagem final das tarefas são publicadas direto no portfólio."}
-      </div>
-      {error && (
-        <div role="alert" className="glass rounded-2xl p-4 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-      {arts === null && !error ? (
-        <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
-          Carregando...
-        </div>
-      ) : arts && arts.length === 0 ? (
-        <div className="glass rounded-2xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          Nenhuma arte enviada ainda. Na tela da tarefa, marque a imagem final e use “Enviar para a
-          vitrine”.
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {(arts ?? []).map((art) => (
-            <article key={art.id} className="glass overflow-hidden rounded-2xl">
-              <ArtImage src={art.imageUrl} title={art.title} />
-              <div className="space-y-2 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h3 className="min-w-0 truncate font-medium">{art.title}</h3>
-                  <ArtStatusBadge art={art} />
-                </div>
-                <p className="text-xs text-muted-foreground">Por {art.artistName}</p>
-                {art.reviewNote && (
-                  <p className="rounded-md bg-destructive/10 p-2 text-xs">
-                    Motivo: {art.reviewNote}
-                  </p>
-                )}
-                {art.taskId && (
-                  <Link
-                    to="/projetos/$projectId/tarefas/$taskId"
-                    params={{ projectId: String(project.id), taskId: String(art.taskId) }}
-                    className="inline-block text-xs text-primary hover:underline"
-                  >
-                    Abrir tarefa
-                  </Link>
-                )}
-                {owner && art.ndaStatus === "LOCKED_BY_NDA" && project.status === "ACTIVE" && (
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <Button
-                      size="sm"
-                      className="gradient-primary text-primary-foreground"
-                      onClick={() => setReview({ art, mode: "approve" })}
-                    >
-                      Liberar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setReview({ art, mode: "reject" })}
-                    >
-                      Recusar
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-      <ReviewDialog
-        art={review?.art ?? null}
-        mode={review?.mode ?? "approve"}
-        onClose={() => setReview(null)}
-        onSaved={(updated) => {
-          setArts((items) =>
-            (items ?? []).map((item) => (item.id === updated.id ? updated : item)),
-          );
-          setReview(null);
-        }}
-      />
-    </div>
+    <Badge variant="outline" className="text-muted-foreground">
+      <Lock className="mr-1 size-3" /> Privado
+    </Badge>
   );
 }

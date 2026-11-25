@@ -38,6 +38,16 @@ public class Project {
     @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean ndaEnabled = false;
 
+    // WIP automático: o projeto fica público e cada imagem enviada numa tarefa vira uma publicação no feed.
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean autoWip = false;
+
+    // Quando o projeto ficou público pela primeira vez.
+    private java.time.LocalDateTime publicSince;
+
+    // Só vale no corporativo com NDA: até esta data, nada do projeto aparece em público.
+    private java.time.LocalDate ndaReleaseDate;
+
     // Relacionamento opcional com o Criador do Projeto (usuário)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id", nullable = false)
@@ -136,5 +146,28 @@ public class Project {
     @Override
     public int hashCode() {
         return Objects.hash(id);
+    }
+    public boolean isAutoWip() {
+        return autoWip;
+    }
+
+    public void setAutoWip(boolean autoWip) {
+        this.autoWip = autoWip;
+    }
+
+    public java.time.LocalDateTime getPublicSince() {
+        return publicSince;
+    }
+
+    public void setPublicSince(java.time.LocalDateTime publicSince) {
+        this.publicSince = publicSince;
+    }
+
+    public java.time.LocalDate getNdaReleaseDate() {
+        return ndaReleaseDate;
+    }
+
+    public void setNdaReleaseDate(java.time.LocalDate ndaReleaseDate) {
+        this.ndaReleaseDate = ndaReleaseDate;
     }
 }

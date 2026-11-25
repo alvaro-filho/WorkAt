@@ -35,8 +35,16 @@ export interface Project {
   owner: UserSummary | null;
   /** Corporativo: contratados veem todas as tarefas (e não só as atribuídas a eles). */
   contractorsSeeAllTasks: boolean;
-  /** Corporativo: artes enviadas à vitrine nascem travadas e só o dono libera. */
+  /** Corporativo: NDA ligado (nada é publicado até a data de liberação). */
   ndaEnabled: boolean;
+  /** WIP automático: o projeto fica público e cada imagem enviada vira um WIP no feed. */
+  autoWip: boolean;
+  /** Corporativo com NDA: data a partir da qual o projeto pode aparecer em público (AAAA-MM-DD). */
+  ndaReleaseDate: string | null;
+  /** NDA ativo hoje (ligado e sem data de liberação alcançada). */
+  ndaActive: boolean;
+  /** O público vê o projeto agora (WIP automático ligado e sem NDA ativo). */
+  publiclyVisible: boolean;
 }
 
 export interface TaskFile {
@@ -70,38 +78,47 @@ export interface ProjectInvitation {
   createdAt: string;
 }
 
-export type NdaStatus = "LOCKED_BY_NDA" | "APPROVED_FOR_RELEASE";
+export type PostKind = "WIP" | "STANDALONE" | "PROJECT_PUBLISHED";
 
-export interface ShowcaseArt {
+/** Publicação: aparece no feed Publicações, no perfil e no portfólio. */
+export interface Post {
   id: number;
-  title: string;
-  description: string | null;
-  imageUrl: string | null;
-  ndaStatus: NdaStatus;
-  reviewNote: string | null;
-  releaseDate: string | null;
-  artistName: string;
-  artistUsername: string;
-  companyName: string;
-  projectId: number | null;
-  projectName: string | null;
-  taskId: number | null;
+  kind: PostKind;
+  /** "WIP" ou "FINAL" (contém a imagem final da tarefa); null no post avulso e no aviso de projeto público. */
+  label: "WIP" | "FINAL" | null;
+  title: string | null;
+  subtitle: string | null;
+  author: UserSummary;
+  project: { id: number; name: string; type: ProjectType } | null;
+  task: { id: number; title: string; status: ApiTaskStatus } | null;
+  images: { id: number; url: string }[];
+  hiddenFromPortfolio: boolean;
+  /** Falso quando só o autor e quem participa do projeto conseguem ver. */
+  isPublic: boolean;
   createdAt: string;
 }
 
-export interface PublicShowcaseArt {
+/** Visão pública do projeto: cada tarefa vira título, subtítulo e imagens. */
+export interface PublicProject {
   id: number;
-  title: string;
+  name: string;
   description: string | null;
-  imageUrl: string | null;
-  artistName: string;
-  artistUsername: string;
-  companyName: string;
-  companyUsername: string;
-  projectName: string | null;
-  releaseDate: string | null;
-  /** Quando a arte ficou pública (ordem do feed do Explorar). */
-  publishedAt: string | null;
+  type: ProjectType;
+  status: "ACTIVE" | "CLOSED";
+  owner: UserSummary | null;
+  members: UserSummary[];
+  publicSince: string | null;
+  isPublic: boolean;
+  viewerParticipates: boolean;
+  updates: {
+    taskId: number;
+    title: string;
+    subtitle: string | null;
+    done: boolean;
+    firstImageAt: string;
+    lastImageAt: string;
+    images: { fileId: number; url: string; finalImage: boolean; createdAt: string }[];
+  }[];
 }
 
 export interface ProfileProject {
@@ -115,13 +132,19 @@ export interface ProfileProject {
   nda: boolean;
   masked: boolean;
   ownerName: string | null;
+  /** Projeto público: aparece no portfólio e tem visão pública. */
+  publicView: boolean;
+  coverUrl: string | null;
 }
 
 export interface Profile {
   user: UserSummary;
   me: boolean;
   memberSince: string | null;
-  portfolio: PublicShowcaseArt[];
+  /** Posts avulsos que aparecem no portfólio. Os projetos públicos vêm em projects (publicView). */
+  portfolio: Post[];
+  /** Aba Posts: tudo o que a pessoa publicou e o visitante pode ver. */
+  posts: Post[];
   projects: ProfileProject[];
   hiddenPersonalProjects: number;
   heatmap: { date: string; count: number }[];
@@ -141,6 +164,8 @@ export interface ApiTask {
   assignee: UserSummary | null;
   createdAt: string;
   updatedAt: string;
+  /** Tarefa interna: fora da visão pública e não gera WIP. */
+  hiddenFromPublic: boolean;
 }
 
 export class ApiError extends Error {
@@ -316,7 +341,13 @@ export const api = {
   deleteFile: (fileId: number) => request<void>(`/files/${fileId}`, { method: "DELETE" }),
   updateProjectSettings: (
     projectId: number,
-    payload: { contractorsSeeAllTasks?: boolean; ndaEnabled?: boolean },
+    payload: {
+      contractorsSeeAllTasks?: boolean;
+      ndaEnabled?: boolean;
+      autoWip?: boolean;
+      /** "" tira a data. */
+      ndaReleaseDate?: string;
+    },
   ) =>
     request<Project>(`/projects/${projectId}/settings`, {
       method: "PATCH",
@@ -355,32 +386,17 @@ export const api = {
     request<ProjectInvitation>(`/invitations/${invitationId}/accept`, { method: "POST" }),
   declineInvitation: (invitationId: number) =>
     request<ProjectInvitation>(`/invitations/${invitationId}/decline`, { method: "POST" }),
-  createShowcaseArt: (payload: {
-    title: string;
-    description?: string;
-    imageUrl?: string;
-    companyEmail: string;
-    projectId?: number;
-  }) => request<ShowcaseArt>("/showcase", { method: "POST", body: JSON.stringify(payload) }),
-  myShowcase: () => request<ShowcaseArt[]>("/showcase/mine"),
   profile: (username: string) =>
     request<Profile>(
       `/users/${encodeURIComponent(username)}/profile`,
       {},
       { authFailure: "verify-session" },
     ),
-  submitToShowcase: (taskId: number, payload: { title?: string; description?: string }) =>
-    request<ShowcaseArt>(`/tasks/${taskId}/showcase`, {
-      method: "POST",
-      body: JSON.stringify(payload),
+  setTaskHiddenFromPublic: (taskId: number, hiddenFromPublic: boolean) =>
+    request<ApiTask>(`/tasks/${taskId}/visibility`, {
+      method: "PATCH",
+      body: JSON.stringify({ hiddenFromPublic }),
     }),
-  /** Arte da vitrine ligada à tarefa, ou undefined se ainda não foi enviada. */
-  taskShowcase: (taskId: number) =>
-    request<ShowcaseArt | undefined>(
-      `/tasks/${taskId}/showcase`,
-      {},
-      { authFailure: "verify-session" },
-    ),
   taskCanvas: (taskId: number) =>
     request<{ content: string; updatedByName: string | null; updatedAt: string | null }>(
       `/tasks/${taskId}/canvas`,
@@ -392,26 +408,33 @@ export const api = {
       `/tasks/${taskId}/canvas`,
       { method: "PUT", body: JSON.stringify({ content }) },
     ),
-  projectShowcase: (projectId: number) =>
-    request<ShowcaseArt[]>(
-      `/projects/${projectId}/showcase`,
-      {},
-      { authFailure: "verify-session" },
-    ),
-  showcaseInbox: () => request<ShowcaseArt[]>("/showcase/inbox"),
-  updateShowcaseNdaStatus: (
-    artId: number,
-    payload: { status: NdaStatus; releaseDate?: string; note?: string },
-  ) =>
-    request<ShowcaseArt>(`/showcase/${artId}/nda-status`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
-  publicShowcase: () =>
-    request<PublicShowcaseArt[]>(
-      "/showcase/public",
+  /** Feed Publicações: só o que é público, mais novo primeiro. before = id para a próxima página. */
+  feed: (before?: number) =>
+    request<Post[]>(
+      `/feed${before ? `?before=${before}` : ""}`,
       { method: "GET" },
       { authFailure: "ignore", sendAuthorization: false },
+    ),
+  createPost: (file: File, title?: string, subtitle?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (title?.trim()) form.append("title", title.trim());
+    if (subtitle?.trim()) form.append("subtitle", subtitle.trim());
+    return request<Post>("/posts", { method: "POST", body: form });
+  },
+  /** "Publicar como post": uma imagem de tarefa vira post avulso. */
+  publishFile: (fileId: number, payload: { title?: string; subtitle?: string } = {}) =>
+    request<Post>(`/files/${fileId}/post`, { method: "POST", body: JSON.stringify(payload) }),
+  updatePost: (
+    postId: number,
+    payload: { title?: string; subtitle?: string; hiddenFromPortfolio?: boolean },
+  ) => request<Post>(`/posts/${postId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deletePost: (postId: number) => request<void>(`/posts/${postId}`, { method: "DELETE" }),
+  publicProject: (projectId: number, order: "asc" | "desc" = "asc") =>
+    request<PublicProject>(
+      `/projects/${projectId}/public?order=${order}`,
+      {},
+      { authFailure: "verify-session" },
     ),
 };
 

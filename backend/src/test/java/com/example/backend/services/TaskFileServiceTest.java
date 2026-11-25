@@ -46,7 +46,7 @@ class TaskFileServiceTest {
         memberRepository = mock(ProjectMemberRepository.class);
         fileRepository = mock(TaskFileRepository.class);
         service = new TaskFileService(new ProjectAccessService(projectRepository, memberRepository),
-                taskRepository, fileRepository, mock(com.example.backend.repositories.ShowcaseArtRepository.class),
+                taskRepository, fileRepository, mock(PostService.class),
                 storage.toString(), 1);
 
         owner = user(1L);

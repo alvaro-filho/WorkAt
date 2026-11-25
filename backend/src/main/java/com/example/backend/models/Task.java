@@ -38,6 +38,10 @@ public class Task {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    // Tarefa interna: não aparece na visão pública do projeto nem gera WIP.
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean hiddenFromPublic = false;
+
     @Column(name = "progress", nullable = false)
     private Integer progress = 0;
 
@@ -179,4 +183,12 @@ public class Task {
     }
 
     // --- Boilerplate Methods ---
+
+    public boolean isHiddenFromPublic() {
+        return hiddenFromPublic;
+    }
+
+    public void setHiddenFromPublic(boolean hiddenFromPublic) {
+        this.hiddenFromPublic = hiddenFromPublic;
+    }
 }

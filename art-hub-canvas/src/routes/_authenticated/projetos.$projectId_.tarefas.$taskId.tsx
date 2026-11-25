@@ -12,7 +12,6 @@ import {
   UploadCloud,
 } from "lucide-react";
 
-import { ArtStatusBadge } from "@/components/art/ArtPieces";
 import { AppLayout } from "@/components/layout/AppLayout";
 import {
   AlertDialog,
@@ -38,6 +37,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   api,
@@ -48,7 +48,6 @@ import {
   type ApiTaskStatus,
   type Project,
   type ProjectMember,
-  type ShowcaseArt,
   type TaskFile,
 } from "@/lib/api";
 import { logActivity, logStatusActivity } from "@/lib/activity-api";
@@ -99,7 +98,6 @@ function TaskPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [showcaseArt, setShowcaseArt] = useState<ShowcaseArt | null>(null);
 
   const loadFiles = useCallback(async () => {
     setFiles(await api.taskFiles(taskId));
@@ -122,10 +120,6 @@ function TaskPage() {
         setProject(loadedProject);
         setTask(loadedTask);
         setFiles(loadedFiles);
-        api
-          .taskShowcase(taskId)
-          .then((art) => active && setShowcaseArt(art ?? null))
-          .catch(() => undefined);
         if (loadedProject.type !== "PERSONAL") {
           api
             .members(projectId)
@@ -280,13 +274,14 @@ function TaskPage() {
             </Button>
           </section>
 
-          <ShowcaseCard
+          <PublishCard
             project={project}
             task={task}
+            imageFiles={files.filter((file) => file.image)}
             finalImage={finalImage}
-            canSubmit={canWork}
-            art={showcaseArt}
-            onSubmitted={setShowcaseArt}
+            canPublish={canWork}
+            canManage={permissions.canManageTasks}
+            onTaskChange={setTask}
           />
 
           <section className="glass space-y-4 rounded-2xl p-4">
@@ -641,55 +636,78 @@ function DeliveriesSection({
   );
 }
 
-/** Envio da imagem final para a vitrine (portfólio) e a situação da arte. */
-function ShowcaseCard({
+/**
+ * Publicação a partir da tarefa: mostra se as imagens daqui viram WIP (projeto público), permite marcar a tarefa
+ * como interna e publicar uma imagem como post avulso, mesmo com o projeto privado (menos sob NDA).
+ */
+function PublishCard({
   project,
   task,
+  imageFiles,
   finalImage,
-  canSubmit,
-  art,
-  onSubmitted,
+  canPublish,
+  canManage,
+  onTaskChange,
 }: {
   project: Project;
   task: ApiTask;
+  imageFiles: TaskFile[];
   finalImage: TaskFile | null;
-  canSubmit: boolean;
-  art: ShowcaseArt | null;
-  onSubmitted: (art: ShowcaseArt) => void;
+  canPublish: boolean;
+  canManage: boolean;
+  onTaskChange: (task: ApiTask) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [fileId, setFileId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [subtitle, setSubtitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const nda = project.type === "CORPORATE" && project.ndaEnabled;
-  const alreadyPublishedThisImage =
-    art !== null &&
-    art.ndaStatus === "APPROVED_FOR_RELEASE" &&
-    !art.reviewNote &&
-    finalImage !== null;
+  const [published, setPublished] = useState(false);
+
+  const status = project.ndaActive
+    ? "Projeto sob NDA: nada desta tarefa é publicado até a data de liberação."
+    : task.hiddenFromPublic
+      ? "Tarefa interna: fica fora da visão pública e não gera WIP."
+      : project.autoWip
+        ? "WIP automático ligado: cada imagem enviada aqui vira um WIP no feed Publicações."
+        : "Projeto privado: as imagens ficam só aqui. Para mostrar uma peça, publique como post.";
 
   const openDialog = () => {
-    setTitle(art?.title ?? task.title);
-    setDescription(art?.description ?? "");
+    setFileId((finalImage ?? imageFiles[0])?.id ?? null);
+    setTitle(task.title);
+    setSubtitle("");
     setError(null);
+    setPublished(false);
     setOpen(true);
+  };
+
+  const toggleInternal = async (hidden: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      onTaskChange(await api.setTaskHiddenFromPublic(task.id, hidden));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível salvar.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (fileId === null) return;
     setBusy(true);
     setError(null);
     try {
-      onSubmitted(
-        await api.submitToShowcase(task.id, {
-          title: title.trim(),
-          ...(description.trim() ? { description: description.trim() } : {}),
-        }),
-      );
+      await api.publishFile(fileId, {
+        title: title.trim(),
+        ...(subtitle.trim() ? { subtitle: subtitle.trim() } : {}),
+      });
+      setPublished(true);
       setOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Não foi possível enviar para a vitrine.");
+      setError(e instanceof Error ? e.message : "Não foi possível publicar.");
     } finally {
       setBusy(false);
     }
@@ -698,57 +716,101 @@ function ShowcaseCard({
   return (
     <section className="glass space-y-3 rounded-2xl p-4">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">Vitrine</h3>
-        {art && <ArtStatusBadge art={art} />}
+        <h3 className="text-sm font-semibold">Publicação</h3>
+        {project.ndaActive ? (
+          <Badge variant="outline" className="border-amber-500/50 text-amber-300">
+            NDA
+          </Badge>
+        ) : project.autoWip && !task.hiddenFromPublic ? (
+          <Badge variant="outline" className="border-neon/50 text-neon">
+            Pública
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-muted-foreground">
+            Privada
+          </Badge>
+        )}
       </div>
-      {art?.reviewNote && (
-        <p className="rounded-md bg-destructive/10 p-2 text-xs">
-          O contratante recusou: {art.reviewNote}
+      <p className="text-xs text-muted-foreground">{status}</p>
+      {canManage && (
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="taskInternal" className="text-xs">
+            Tarefa interna (fora da visão pública)
+          </Label>
+          <Switch
+            id="taskInternal"
+            checked={task.hiddenFromPublic}
+            disabled={busy}
+            onCheckedChange={(checked) => void toggleInternal(checked)}
+          />
+        </div>
+      )}
+      {canPublish && !project.ndaActive && (
+        <Button
+          variant="outline"
+          className="w-full"
+          disabled={imageFiles.length === 0}
+          onClick={openDialog}
+        >
+          Publicar como post
+        </Button>
+      )}
+      {canPublish && !project.ndaActive && imageFiles.length === 0 && (
+        <p className="text-xs text-muted-foreground">
+          Envie uma imagem nas entregas para publicar.
         </p>
       )}
-      <p className="text-xs text-muted-foreground">
-        {!finalImage
-          ? "Marque uma imagem final nas entregas para poder enviar ao portfólio."
-          : nda
-            ? "Projeto sob NDA: a arte fica travada até o contratante liberar."
-            : "A imagem final vai direto para o portfólio de quem enviou."}
-      </p>
-      {canSubmit && finalImage && (
-        <Button variant="outline" className="w-full" onClick={openDialog}>
-          {art
-            ? alreadyPublishedThisImage
-              ? "Atualizar na vitrine"
-              : "Reenviar para a vitrine"
-            : "Enviar para a vitrine"}
-        </Button>
+      {published && (
+        <p className="text-xs text-neon">Publicado! Aparece no feed e no seu portfólio.</p>
+      )}
+      {error && !open && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
       )}
 
       <Dialog open={open} onOpenChange={(value) => !busy && setOpen(value)}>
         <DialogContent className="border-border bg-card">
           <form onSubmit={submit} className="space-y-4">
             <DialogHeader>
-              <DialogTitle>Enviar para a vitrine</DialogTitle>
+              <DialogTitle>Publicar como post</DialogTitle>
               <DialogDescription>
-                A imagem final ({finalImage?.originalName}) vai para o seu portfólio
-                {nda ? " depois que o contratante liberar." : "."}
+                A imagem vai para o feed Publicações e para o seu portfólio, mesmo que o projeto
+                continue privado. O resto do projeto não aparece.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2">
-              <Label htmlFor="artTitle">Título</Label>
+              <Label htmlFor="postFile">Imagem</Label>
+              <select
+                id="postFile"
+                value={fileId ?? ""}
+                onChange={(e) => setFileId(Number(e.target.value))}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {imageFiles.map((file) => (
+                  <option key={file.id} value={file.id}>
+                    v{file.version} · {file.originalName}
+                    {file.finalImage ? " (final)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="postTitle">Título</Label>
               <Input
-                id="artTitle"
+                id="postTitle"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 maxLength={150}
-                required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="artDescription">Descrição</Label>
+              <Label htmlFor="postSubtitle">Subtítulo</Label>
               <Textarea
-                id="artDescription"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                id="postSubtitle"
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.target.value)}
+                maxLength={2000}
                 placeholder="Opcional"
               />
             </div>
@@ -768,10 +830,10 @@ function ShowcaseCard({
               </Button>
               <Button
                 type="submit"
-                disabled={busy || !title.trim()}
+                disabled={busy || fileId === null}
                 className="gradient-primary text-primary-foreground"
               >
-                {busy ? "Enviando..." : "Enviar"}
+                {busy ? "Publicando..." : "Publicar"}
               </Button>
             </DialogFooter>
           </form>

@@ -34,13 +34,15 @@ public class ProjectService {
     private final ProjectInvitationRepository invitationRepository;
     private final ProjectAccessService access;
     private final TaskFileService taskFileService;
+    private final PostService postService;
 
     public ProjectService(ProjectRepository projectRepository, TaskRepository taskRepository,
                           ActivityEventRepository activityEventRepository,
                           ProjectMemberRepository memberRepository,
                           ProjectInvitationRepository invitationRepository,
                           ProjectAccessService access,
-                          TaskFileService taskFileService) {
+                          TaskFileService taskFileService,
+                          PostService postService) {
         this.projectRepository = projectRepository;
         this.taskRepository = taskRepository;
         this.activityEventRepository = activityEventRepository;
@@ -48,6 +50,7 @@ public class ProjectService {
         this.invitationRepository = invitationRepository;
         this.access = access;
         this.taskFileService = taskFileService;
+        this.postService = postService;
     }
 
     /** Projetos em que o usuário participa: os que ele criou e os em que é membro. */
@@ -95,11 +98,17 @@ public class ProjectService {
         return projectRepository.save(project);
     }
 
-    /** Configurações do dono. Hoje: no corporativo, se os contratados veem todas as tarefas. */
+    /**
+     * Configurações do dono.
+     * Qualquer tipo: WIP automático (projeto público). Só corporativo: contratados veem tudo, NDA e data de liberação.
+     * ndaReleaseDate: null = não muda, "" = tira a data, "AAAA-MM-DD" = define.
+     */
     @Transactional
-    public Project updateSettings(Long projectId, User user, Boolean contractorsSeeAllTasks, Boolean ndaEnabled) {
+    public Project updateSettings(Long projectId, User user, Boolean contractorsSeeAllTasks, Boolean ndaEnabled,
+                                  Boolean autoWip, String ndaReleaseDate) {
         Project project = access.requireOwner(projectId, user);
-        if ((contractorsSeeAllTasks != null || ndaEnabled != null) && project.getType() != ProjectType.CORPORATE) {
+        if ((contractorsSeeAllTasks != null || ndaEnabled != null || ndaReleaseDate != null)
+                && project.getType() != ProjectType.CORPORATE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Essas opções só existem em projetos corporativos.");
         }
@@ -109,7 +118,32 @@ public class ProjectService {
         if (ndaEnabled != null) {
             project.setNdaEnabled(ndaEnabled);
         }
-        return projectRepository.save(project);
+        if (ndaReleaseDate != null) {
+            project.setNdaReleaseDate(parseReleaseDate(ndaReleaseDate));
+        }
+        boolean turnedPublic = autoWip != null && autoWip && !project.isAutoWip();
+        if (autoWip != null) {
+            project.setAutoWip(autoWip);
+        }
+        if (turnedPublic && project.getPublicSince() == null) {
+            project.setPublicSince(java.time.LocalDateTime.now());
+        }
+        Project saved = projectRepository.save(project);
+        if (turnedPublic) {
+            postService.recordProjectPublished(saved, user);
+        }
+        return saved;
+    }
+
+    private static java.time.LocalDate parseReleaseDate(String value) {
+        if (value.isBlank()) {
+            return null;
+        }
+        try {
+            return java.time.LocalDate.parse(value.trim());
+        } catch (java.time.format.DateTimeParseException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Data de liberação inválida (use AAAA-MM-DD).");
+        }
     }
 
     @Transactional
@@ -121,6 +155,7 @@ public class ProjectService {
         }
 
         activityEventRepository.deleteByProject(project);
+        postService.deleteAllForProject(project);
         taskFileService.deleteAllForProject(project);
         taskRepository.deleteByProject(project);
         invitationRepository.deleteByProject(project);

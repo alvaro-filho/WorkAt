@@ -6,7 +6,6 @@ import com.example.backend.models.ProjectType;
 import com.example.backend.models.User;
 import com.example.backend.repositories.ProjectMemberRepository;
 import com.example.backend.repositories.ProjectRepository;
-import com.example.backend.repositories.ShowcaseArtRepository;
 import com.example.backend.repositories.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,11 +35,11 @@ class ProfileServiceTest {
         UserRepository userRepository = mock(UserRepository.class);
         projectService = mock(ProjectService.class);
         memberRepository = mock(ProjectMemberRepository.class);
-        ShowcaseArtRepository artRepository = mock(ShowcaseArtRepository.class);
+        PostService postService = mock(PostService.class);
         ActivityEventService activityEventService = mock(ActivityEventService.class);
         service = new ProfileService(userRepository, projectService,
                 new ProjectAccessService(mock(ProjectRepository.class), memberRepository),
-                artRepository, activityEventService);
+                postService, activityEventService);
 
         artist = user(1L, "artista", "Ana Artista");
         studio = user(2L, "estudio", "Estúdio Lua");
@@ -53,7 +52,7 @@ class ProfileServiceTest {
         when(userRepository.findByUsername("artista")).thenReturn(Optional.of(artist));
         when(projectService.findProjectsForUser(artist)).thenReturn(List.of(personal, cooperative, corporateNda));
         when(memberRepository.existsByProjectAndUser(corporateNda, artist)).thenReturn(true);
-        when(artRepository.findPublicArtsOf(any(), any(), any())).thenReturn(List.of());
+        when(postService.visibleByAuthor(any(), any())).thenReturn(List.of());
         when(activityEventService.getHeatmap(1L)).thenReturn(List.of());
     }
 

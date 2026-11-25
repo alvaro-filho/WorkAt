@@ -18,6 +18,7 @@ public class TaskResponse {
     private final UserSummary assignee;
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
+    private final boolean hiddenFromPublic;
 
     private TaskResponse(Task task) {
         this.id = task.getId();
@@ -30,6 +31,7 @@ public class TaskResponse {
         this.assignee = UserSummary.from(task.getAssignee());
         this.createdAt = task.getCreatedAt();
         this.updatedAt = task.getUpdatedAt();
+        this.hiddenFromPublic = task.isHiddenFromPublic();
     }
 
     public static TaskResponse from(Task task) { return new TaskResponse(task); }
@@ -44,4 +46,5 @@ public class TaskResponse {
     public UserSummary getAssignee() { return assignee; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public boolean isHiddenFromPublic() { return hiddenFromPublic; }
 }

@@ -11,7 +11,10 @@ public record ProfileResponse(
         UserSummary user,
         boolean me,
         LocalDateTime memberSince,
-        List<PublicShowcaseResponse> portfolio,
+        /** Posts avulsos que aparecem no portfólio (não ocultos). Os projetos públicos ficam em projects. */
+        List<PostResponse> portfolio,
+        /** Aba Posts: tudo o que a pessoa publicou e o visitante pode ver. */
+        List<PostResponse> posts,
         List<ProfileProject> projects,
         int hiddenPersonalProjects,
         List<HeatmapDTO> heatmap
@@ -28,10 +31,13 @@ public record ProfileResponse(
             ProjectStatus status,
             boolean nda,
             boolean masked,
-            String ownerName
+            String ownerName,
+            /** Projeto público (WIP automático): aparece no portfólio e tem visão pública. */
+            boolean publicView,
+            String coverUrl
     ) {
         public static ProfileProject masked(ProjectType type, ProjectRole role, ProjectStatus status, String ownerName) {
-            return new ProfileProject(null, null, null, type, role, status, true, true, ownerName);
+            return new ProfileProject(null, null, null, type, role, status, true, true, ownerName, false, null);
         }
     }
 }

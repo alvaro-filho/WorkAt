@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Compass, FolderKanban, LogOut, Palette, UserRound } from "lucide-react";
+import { FolderKanban, LogOut, Newspaper, Palette, UserRound } from "lucide-react";
 
 import {
   Sidebar,
@@ -30,7 +30,7 @@ export function AppSidebar() {
   const items = [
     { title: "Meu perfil", url: profileUrl, icon: UserRound },
     { title: "Projetos", url: "/projetos", icon: FolderKanban },
-    { title: "Explorar", url: "/explorar", icon: Compass },
+    { title: "Publicações", url: "/publicacoes", icon: Newspaper },
   ];
 
   const handleLogout = () => {

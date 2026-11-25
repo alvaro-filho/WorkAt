@@ -21,7 +21,11 @@ public record ProjectResponse(
         ProjectRole myRole,
         UserSummary owner,
         boolean contractorsSeeAllTasks,
-        boolean ndaEnabled
+        boolean ndaEnabled,
+        boolean autoWip,
+        java.time.LocalDate ndaReleaseDate,
+        boolean ndaActive,
+        boolean publiclyVisible
 ) {
     public static ProjectResponse from(Project project, User viewer) {
         ProjectRole role = ProjectAccessService.isOwner(project, viewer) ? ProjectRole.OWNER : ProjectRole.MEMBER;
@@ -35,7 +39,11 @@ public record ProjectResponse(
                 role,
                 UserSummary.from(project.getCreatedByUser()),
                 project.isContractorsSeeAllTasks(),
-                project.isNdaEnabled()
+                project.isNdaEnabled(),
+                project.isAutoWip(),
+                project.getNdaReleaseDate(),
+                com.example.backend.services.PostService.ndaBlocks(project),
+                com.example.backend.services.PostService.isProjectPublic(project)
         );
     }
 }

@@ -59,6 +59,19 @@ public class TaskController {
         return ResponseEntity.ok(TaskResponse.from(taskService.assign(taskId, user, request.getUserId())));
     }
 
+    @PatchMapping("/api/v1/tasks/{taskId}/visibility")
+    public ResponseEntity<TaskResponse> updateVisibility(@PathVariable Long taskId,
+                                                         @RequestBody java.util.Map<String, Boolean> request,
+                                                         Authentication authentication) {
+        User user = findAuthenticatedUser(authentication);
+        Boolean hidden = request == null ? null : request.get("hiddenFromPublic");
+        if (hidden == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "Informe hiddenFromPublic.");
+        }
+        return ResponseEntity.ok(TaskResponse.from(taskService.setHiddenFromPublic(taskId, user, hidden)));
+    }
+
     @PatchMapping("/api/v1/tasks/{taskId}/status")
     public ResponseEntity<TaskResponse> updateStatus(@PathVariable Long taskId,
                                                      @Valid @RequestBody TaskStatusUpdateRequest request,

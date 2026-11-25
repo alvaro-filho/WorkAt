@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CalendarDays, FolderKanban, ImageIcon, Lock, Plus } from "lucide-react";
+import { CalendarDays, FolderKanban, Globe, ImageIcon, Lock, Plus } from "lucide-react";
 
 import { ArtImage } from "@/components/art/ArtPieces";
 import { ActivityHeatmap } from "@/components/dashboard/ActivityHeatmap";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PostCard } from "@/components/posts/PostCard";
+import { PostComposer } from "@/components/posts/PostComposer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { api, ApiError, type Profile, type ProfileProject } from "@/lib/api";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { api, ApiError, type Post, type Profile, type ProfileProject } from "@/lib/api";
 import { projectTypeInfo, roleLabel } from "@/lib/project-labels";
 
 export const Route = createFileRoute("/_authenticated/u/$username")({
@@ -20,6 +23,8 @@ function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     let active = true;
@@ -39,6 +44,39 @@ function ProfilePage() {
     };
   }, [username]);
 
+  const changePost = (post: Post) =>
+    setProfile((current) =>
+      current
+        ? {
+            ...current,
+            posts: current.posts.map((item) => (item.id === post.id ? post : item)),
+            portfolio: post.hiddenFromPortfolio
+              ? current.portfolio.filter((item) => item.id !== post.id)
+              : current.portfolio.some((item) => item.id === post.id)
+                ? current.portfolio.map((item) => (item.id === post.id ? post : item))
+                : [post, ...current.portfolio],
+          }
+        : current,
+    );
+  const removePost = (postId: number) =>
+    setProfile((current) =>
+      current
+        ? {
+            ...current,
+            posts: current.posts.filter((item) => item.id !== postId),
+            portfolio: current.portfolio.filter((item) => item.id !== postId),
+          }
+        : current,
+    );
+  const addPost = (post: Post) => {
+    setNow(Date.now());
+    setProfile((current) =>
+      current
+        ? { ...current, posts: [post, ...current.posts], portfolio: [post, ...current.portfolio] }
+        : current,
+    );
+  };
+
   const heatmap = useMemo(
     () =>
       (profile?.heatmap ?? []).reduce<Record<string, number>>((result, item) => {
@@ -53,8 +91,11 @@ function ProfilePage() {
       <AppLayout title="Perfil">
         <div className="glass rounded-2xl p-8 text-center">
           <p className="font-medium">{error ?? "Perfil não encontrado."}</p>
-          <Link to="/explorar" className="mt-3 inline-block text-sm text-primary hover:underline">
-            Ir para Explorar
+          <Link
+            to="/publicacoes"
+            className="mt-3 inline-block text-sm text-primary hover:underline"
+          >
+            Ir para Publicações
           </Link>
         </div>
       </AppLayout>
@@ -74,6 +115,10 @@ function ProfilePage() {
   const { user } = profile;
   const isCompany = user.role === "COMPANY";
   const ownProjects = profile.projects.filter((project) => project.role === "OWNER").length;
+  const publicProjects = profile.projects.filter(
+    (project): project is ProfileProject & { id: number } =>
+      project.publicView && project.id !== null,
+  );
 
   return (
     <AppLayout
@@ -101,8 +146,8 @@ function ProfilePage() {
             <li className="flex items-center gap-2">
               <ImageIcon className="size-4" />
               <span>
-                <span className="font-semibold text-foreground">{profile.portfolio.length}</span>{" "}
-                {profile.portfolio.length === 1 ? "arte publicada" : "artes publicadas"}
+                <span className="font-semibold text-foreground">{profile.posts.length}</span>{" "}
+                {profile.posts.length === 1 ? "publicação" : "publicações"}
               </span>
             </li>
             <li className="flex items-center gap-2">
@@ -128,99 +173,155 @@ function ProfilePage() {
         </aside>
 
         <div className="min-w-0 space-y-8">
-          <section aria-labelledby="portfolio-title">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 id="portfolio-title" className="text-sm font-semibold">
-                Portfólio
-              </h3>
+          <Tabs defaultValue="portfolio">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <TabsList>
+                <TabsTrigger value="portfolio">Portfólio</TabsTrigger>
+                <TabsTrigger value="posts">Posts ({profile.posts.length})</TabsTrigger>
+                <TabsTrigger value="projects">
+                  Projetos ({profile.projects.length + profile.hiddenPersonalProjects})
+                </TabsTrigger>
+              </TabsList>
               {profile.me && (
-                <span className="text-xs text-muted-foreground">
-                  Envie a imagem final de uma tarefa para ela aparecer aqui
-                </span>
+                <Button
+                  size="sm"
+                  className="gradient-primary text-primary-foreground"
+                  onClick={() => setComposerOpen(true)}
+                >
+                  <Plus className="mr-1 size-4" /> Publicar
+                </Button>
               )}
             </div>
-            {profile.portfolio.length === 0 ? (
-              <div className="glass rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
-                {profile.me
-                  ? "Seu portfólio ainda está vazio. Abra uma tarefa, marque a imagem final e use “Enviar para a vitrine”."
-                  : "Ainda não há artes publicadas."}
-              </div>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {profile.portfolio.map((art) => (
-                  <article key={art.id} className="glass overflow-hidden rounded-2xl">
-                    <ArtImage
-                      src={art.imageUrl}
-                      title={art.title}
-                      className="h-44 w-full object-cover"
-                    />
-                    <div className="space-y-1 p-3">
-                      <p className="truncate text-sm font-medium">{art.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {art.artistUsername === user.username ? (
-                          <>
-                            {art.projectName ?? "Projeto"} · para{" "}
-                            <Link
-                              to="/u/$username"
-                              params={{ username: art.companyUsername }}
-                              className="hover:underline"
-                            >
-                              {art.companyName}
-                            </Link>
-                          </>
-                        ) : (
-                          <>
-                            Arte de{" "}
-                            <Link
-                              to="/u/$username"
-                              params={{ username: art.artistUsername }}
-                              className="hover:underline"
-                            >
-                              {art.artistName}
-                            </Link>
-                          </>
-                        )}
-                      </p>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
 
-          <section aria-labelledby="projects-title">
-            <h3 id="projects-title" className="mb-3 text-sm font-semibold">
-              Projetos
-            </h3>
-            {profile.projects.length === 0 && profile.hiddenPersonalProjects === 0 ? (
-              <div className="glass rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
-                Nenhum projeto ainda.
-              </div>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {profile.projects.map((project, index) => (
-                  <ProjectCard
-                    key={project.id ?? `nda-${index}`}
-                    project={project}
-                    me={profile.me}
-                  />
-                ))}
-              </div>
-            )}
-            {profile.hiddenPersonalProjects > 0 && (
-              <p className="mt-3 text-xs text-muted-foreground">
-                + {profile.hiddenPersonalProjects}{" "}
-                {profile.hiddenPersonalProjects === 1 ? "projeto pessoal" : "projetos pessoais"}{" "}
-                (privados)
-              </p>
-            )}
-          </section>
+            <TabsContent value="portfolio" className="space-y-6">
+              {publicProjects.length === 0 && profile.portfolio.length === 0 ? (
+                <div className="glass rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  {profile.me
+                    ? "Seu portfólio ainda está vazio. Publique uma imagem pelo botão Publicar, ou ligue o WIP automático nas configurações de um projeto para ele aparecer aqui com todas as atualizações."
+                    : "Ainda não há nada no portfólio."}
+                </div>
+              ) : (
+                <>
+                  {publicProjects.length > 0 && (
+                    <section aria-labelledby="public-projects-title">
+                      <h3 id="public-projects-title" className="mb-3 text-sm font-semibold">
+                        Projetos públicos
+                      </h3>
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {publicProjects.map((project) => (
+                          <Link
+                            key={project.id}
+                            to="/projetos/$projectId/publico"
+                            params={{ projectId: String(project.id) }}
+                            className="glass glass-hover block overflow-hidden rounded-2xl"
+                          >
+                            <ArtImage
+                              src={project.coverUrl}
+                              title={project.name ?? "Projeto"}
+                              className="h-44 w-full object-cover"
+                            />
+                            <div className="space-y-1 p-3">
+                              <p className="truncate text-sm font-medium">{project.name}</p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {projectTypeInfo(project.type).label}
+                                {project.role === "MEMBER" && project.ownerName
+                                  ? ` · de ${project.ownerName}`
+                                  : ""}
+                              </p>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                  {profile.portfolio.length > 0 && (
+                    <section aria-labelledby="portfolio-posts-title">
+                      <h3 id="portfolio-posts-title" className="mb-3 text-sm font-semibold">
+                        Artes
+                      </h3>
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {profile.portfolio.map((post) => (
+                          <article key={post.id} className="glass overflow-hidden rounded-2xl">
+                            <ArtImage
+                              src={post.images[0]?.url ?? null}
+                              title={post.title ?? "Arte"}
+                              className="h-44 w-full object-cover"
+                            />
+                            <div className="space-y-1 p-3">
+                              <p className="truncate text-sm font-medium">
+                                {post.title ?? "Sem título"}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {post.subtitle ??
+                                  (post.project ? post.project.name : "Post avulso")}
+                              </p>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </>
+              )}
+            </TabsContent>
+
+            <TabsContent value="posts">
+              {profile.posts.length === 0 ? (
+                <div className="glass rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  {profile.me ? "Você ainda não publicou nada." : "Nenhuma publicação ainda."}
+                </div>
+              ) : (
+                <ol
+                  className="glass divide-y divide-border overflow-hidden rounded-2xl"
+                  aria-label="Posts"
+                >
+                  {profile.posts.map((post) => (
+                    <PostCard
+                      key={post.id}
+                      post={post}
+                      now={now}
+                      onChanged={changePost}
+                      onDeleted={removePost}
+                    />
+                  ))}
+                </ol>
+              )}
+            </TabsContent>
+
+            <TabsContent value="projects">
+              {profile.projects.length === 0 && profile.hiddenPersonalProjects === 0 ? (
+                <div className="glass rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+                  Nenhum projeto ainda.
+                </div>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {profile.projects.map((project, index) => (
+                    <ProjectCard
+                      key={project.id ?? `nda-${index}`}
+                      project={project}
+                      me={profile.me}
+                    />
+                  ))}
+                </div>
+              )}
+              {profile.hiddenPersonalProjects > 0 && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  + {profile.hiddenPersonalProjects}{" "}
+                  {profile.hiddenPersonalProjects === 1 ? "projeto pessoal" : "projetos pessoais"}{" "}
+                  (privados)
+                </p>
+              )}
+            </TabsContent>
+          </Tabs>
 
           <section aria-label="Atividade">
             <ActivityHeatmap data={heatmap} />
           </section>
         </div>
       </div>
+      {profile.me && (
+        <PostComposer open={composerOpen} onOpenChange={setComposerOpen} onCreated={addPost} />
+      )}
     </AppLayout>
   );
 }
@@ -268,12 +369,28 @@ function ProjectCard({ project, me }: { project: ProfileProject; me: boolean }) 
             <Lock className="size-3" /> NDA
           </span>
         )}
+        {project.publicView && (
+          <span className="inline-flex items-center gap-1 text-neon">
+            <Globe className="size-3" /> Público
+          </span>
+        )}
         {project.role === "MEMBER" && project.ownerName && <span>· de {project.ownerName}</span>}
       </div>
     </>
   );
 
-  // Só quem participa consegue abrir o projeto; para visitantes o cartão é informativo.
+  // Quem participa abre o projeto; visitantes abrem a visão pública, se o projeto for público.
+  if (!me && project.publicView && project.id !== null) {
+    return (
+      <Link
+        to="/projetos/$projectId/publico"
+        params={{ projectId: String(project.id) }}
+        className="glass glass-hover block rounded-2xl p-4"
+      >
+        {body}
+      </Link>
+    );
+  }
   return me && project.id !== null ? (
     <Link
       to="/projetos/$projectId"
