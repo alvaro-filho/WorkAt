@@ -56,6 +56,7 @@ public class SecurityConfig {
                     // Permitir acesso não autenticado especificamente no login e em todos os endpoints de auth
                     .requestMatchers("/api/v1/auth/login").permitAll()
                     .requestMatchers("/api/v1/auth/**").permitAll()
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/showcase/public").permitAll()
                     // Todas as outras requisições exigem autenticação
                     .anyRequest().authenticated()
             )

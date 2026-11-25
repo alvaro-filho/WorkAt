@@ -22,6 +22,32 @@ export interface Project {
   status: "ACTIVE" | "CLOSED";
 }
 
+export type NdaStatus = "LOCKED_BY_NDA" | "APPROVED_FOR_RELEASE";
+
+export interface ShowcaseArt {
+  id: number;
+  title: string;
+  description: string | null;
+  imageUrl: string | null;
+  ndaStatus: NdaStatus;
+  reviewNote: string | null;
+  releaseDate: string | null;
+  artistName: string;
+  companyName: string;
+  projectId: number | null;
+  createdAt: string;
+}
+
+export interface PublicShowcaseArt {
+  id: number;
+  title: string;
+  description: string | null;
+  imageUrl: string | null;
+  artistName: string;
+  companyName: string;
+  releaseDate: string | null;
+}
+
 export type ApiTaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE";
 export type ApiPriority = "LOW" | "MEDIUM" | "HIGH";
 
@@ -65,7 +91,10 @@ function clearSession() {
 async function request<T>(
   path: string,
   init: RequestInit = {},
-  options: { authFailure?: "logout" | "verify-session" | "ignore" } = {},
+  options: {
+    authFailure?: "logout" | "verify-session" | "ignore";
+    sendAuthorization?: boolean;
+  } = {},
 ): Promise<T> {
   if (typeof window === "undefined") {
     throw new Error("As chamadas à API só podem ser feitas no navegador.");
@@ -75,7 +104,7 @@ async function request<T>(
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   const token = window.localStorage.getItem("authToken");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  if (token && options.sendAuthorization !== false) headers.set("Authorization", `Bearer ${token}`);
 
   const response = await fetch(`/api/v1${path}`, { ...init, headers });
   const responseText = await response.text();
@@ -183,4 +212,27 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
   deleteProject: (projectId: number) => request<void>(`/projects/${projectId}`, { method: "DELETE" }),
+  createShowcaseArt: (payload: {
+    title: string;
+    description?: string;
+    imageUrl?: string;
+    companyEmail: string;
+    projectId?: number;
+  }) => request<ShowcaseArt>("/showcase", { method: "POST", body: JSON.stringify(payload) }),
+  myShowcase: () => request<ShowcaseArt[]>("/showcase/mine"),
+  showcaseInbox: () => request<ShowcaseArt[]>("/showcase/inbox"),
+  updateShowcaseNdaStatus: (
+    artId: number,
+    payload: { status: NdaStatus; releaseDate?: string; note?: string },
+  ) =>
+    request<ShowcaseArt>(`/showcase/${artId}/nda-status`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  publicShowcase: () =>
+    request<PublicShowcaseArt[]>(
+      "/showcase/public",
+      { method: "GET" },
+      { authFailure: "ignore", sendAuthorization: false },
+    ),
 };
