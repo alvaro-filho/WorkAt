@@ -57,7 +57,8 @@ class ProjectCreateRequestTest {
                 mock(com.example.backend.repositories.ActivityEventRepository.class),
                 memberRepository,
                 mock(com.example.backend.repositories.ProjectInvitationRepository.class),
-                new com.example.backend.services.ProjectAccessService(projectRepository, memberRepository));
+                new com.example.backend.services.ProjectAccessService(projectRepository, memberRepository),
+                mock(com.example.backend.services.TaskFileService.class));
         ProjectController controller = new ProjectController(projectService,
                 mock(com.example.backend.services.ProjectMembershipService.class), userRepository);
 

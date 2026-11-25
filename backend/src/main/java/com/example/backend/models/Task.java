@@ -45,11 +45,19 @@ public class Task {
     @JoinColumn(name = "project_id", nullable = false)
     private Project project;
 
+    // Responsável pela tarefa (dono ou membro do projeto). Opcional.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignee_user_id")
+    private User assignee;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    public User getAssignee() { return assignee; }
+    public void setAssignee(User assignee) { this.assignee = assignee; }
 
     @PrePersist
     protected void onCreate() {

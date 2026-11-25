@@ -44,9 +44,9 @@ class ProjectAccessRulesTest {
         memberRepository = mock(ProjectMemberRepository.class);
         taskRepository = mock(TaskRepository.class);
         ProjectAccessService access = new ProjectAccessService(projectRepository, memberRepository);
-        taskService = new TaskService(access, taskRepository);
+        taskService = new TaskService(access, taskRepository, mock(TaskFileService.class));
         projectService = new ProjectService(projectRepository, taskRepository, mock(ActivityEventRepository.class),
-                memberRepository, mock(ProjectInvitationRepository.class), access);
+                memberRepository, mock(ProjectInvitationRepository.class), access, mock(TaskFileService.class));
 
         owner = user(1L);
         member = user(2L);
@@ -71,11 +71,75 @@ class ProjectAccessRulesTest {
     }
 
     @Test
-    void memberCanSeeTasksOfTheProject() {
-        project.setType(ProjectType.CORPORATE);
-        when(taskRepository.findByProjectOrderByCreatedAtAsc(project)).thenReturn(List.of(new Task()));
+    void cooperativeMemberSeesAllTasks() {
+        project.setType(ProjectType.COOPERATIVE);
+        when(taskRepository.findByProjectOrderByCreatedAtAsc(project)).thenReturn(List.of(taskIn(project), taskIn(project)));
 
-        assertEquals(1, taskService.listTasks(50L, member).size());
+        assertEquals(2, taskService.listTasks(50L, member).size());
+    }
+
+    @Test
+    void contractorSeesOnlyTasksAssignedToThem() {
+        project.setType(ProjectType.CORPORATE);
+        Task mine = taskIn(project);
+        mine.setAssignee(member);
+        Task other = taskIn(project);
+        when(taskRepository.findByProjectOrderByCreatedAtAsc(project)).thenReturn(List.of(mine, other));
+
+        assertEquals(List.of(mine), taskService.listTasks(50L, member));
+        assertEquals(2, taskService.listTasks(50L, owner).size());
+    }
+
+    @Test
+    void ownerCanLetContractorsSeeAllTasks() {
+        project.setType(ProjectType.CORPORATE);
+        project.setContractorsSeeAllTasks(true);
+        when(taskRepository.findByProjectOrderByCreatedAtAsc(project)).thenReturn(List.of(taskIn(project), taskIn(project)));
+
+        assertEquals(2, taskService.listTasks(50L, member).size());
+    }
+
+    @Test
+    void contractorMovesOnlyTheirOwnTask() {
+        project.setType(ProjectType.CORPORATE);
+        project.setContractorsSeeAllTasks(true);
+        Task mine = taskIn(project);
+        mine.setAssignee(member);
+        Task other = taskIn(project);
+        other.setId(71L);
+        when(taskRepository.findById(70L)).thenReturn(Optional.of(mine));
+        when(taskRepository.findById(71L)).thenReturn(Optional.of(other));
+
+        assertEquals(TaskStatus.REVIEW, taskService.updateStatus(70L, member, TaskStatus.REVIEW).getStatus());
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> taskService.updateStatus(71L, member, TaskStatus.DONE));
+        assertEquals(403, exception.getStatusCode().value());
+    }
+
+    @Test
+    void assigneeMustParticipateInTheProject() {
+        project.setType(ProjectType.CORPORATE);
+        when(memberRepository.findByProjectOrderByJoinedAtAsc(project)).thenReturn(List.of(new ProjectMember(project, member)));
+        Task task = taskIn(project);
+        when(taskRepository.findById(70L)).thenReturn(Optional.of(task));
+
+        assertSame(member, taskService.assign(70L, owner, 2L).getAssignee());
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> taskService.assign(70L, owner, 3L));
+        assertEquals(400, exception.getStatusCode().value());
+        assertNull(taskService.assign(70L, owner, null).getAssignee());
+    }
+
+    @Test
+    void contractorCannotAssignTasks() {
+        project.setType(ProjectType.CORPORATE);
+        Task task = taskIn(project);
+        task.setAssignee(member);
+        when(taskRepository.findById(70L)).thenReturn(Optional.of(task));
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> taskService.assign(70L, member, 1L));
+        assertEquals(403, exception.getStatusCode().value());
     }
 
     @Test
@@ -102,14 +166,14 @@ class ProjectAccessRulesTest {
     }
 
     @Test
-    void corporateMemberCannotMoveTasksYet() {
+    void contractorDoesNotEvenSeeAnUnassignedTask() {
         project.setType(ProjectType.CORPORATE);
         when(taskRepository.findById(70L)).thenReturn(Optional.of(taskIn(project)));
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> taskService.updateStatus(70L, member, TaskStatus.DONE));
 
-        assertEquals(403, exception.getStatusCode().value());
+        assertEquals(404, exception.getStatusCode().value());
     }
 
     @Test

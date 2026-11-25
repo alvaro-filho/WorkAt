@@ -18,10 +18,12 @@ public class TaskService {
 
     private final ProjectAccessService access;
     private final TaskRepository taskRepository;
+    private final TaskFileService taskFileService;
 
-    public TaskService(ProjectAccessService access, TaskRepository taskRepository) {
+    public TaskService(ProjectAccessService access, TaskRepository taskRepository, TaskFileService taskFileService) {
         this.access = access;
         this.taskRepository = taskRepository;
+        this.taskFileService = taskFileService;
     }
 
     @Transactional
@@ -44,13 +46,24 @@ public class TaskService {
         task.setDeadline(request.getDeadline());
         task.setStatus(TaskStatus.TODO);
         task.setProject(project);
+        if (request.getAssigneeId() != null) {
+            task.setAssignee(access.requireParticipantUser(project, request.getAssigneeId()));
+        }
         return taskRepository.save(task);
     }
 
+    /** Tarefas que o usuário pode ver (no corporativo, o contratado só vê as dele, salvo liberação do dono). */
     @Transactional(readOnly = true)
     public List<Task> listTasks(Long projectId, User user) {
         Project project = access.requireParticipant(projectId, user);
-        return taskRepository.findByProjectOrderByCreatedAtAsc(project);
+        return taskRepository.findByProjectOrderByCreatedAtAsc(project).stream()
+                .filter(task -> access.canSeeTask(task, user))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Task getTask(Long taskId, User user) {
+        return findVisibleTask(taskId, user);
     }
 
     @Transactional
@@ -58,24 +71,35 @@ public class TaskService {
         if (status == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O status é obrigatório.");
         }
-        Task task = findTaskForParticipant(taskId, user);
-        access.ensureCanMoveTasks(task.getProject(), user);
+        Task task = findVisibleTask(taskId, user);
+        access.ensureCanWorkOnTask(task, user);
         access.ensureActive(task.getProject());
         task.setStatus(status);
         return taskRepository.save(task);
     }
 
+    /** Define ou remove (userId nulo) o responsável. Quem pode criar tarefas pode atribuir. */
     @Transactional
-    public void deleteTask(Long taskId, User user) {
-        Task task = findTaskForParticipant(taskId, user);
+    public Task assign(Long taskId, User user, Long assigneeId) {
+        Task task = findVisibleTask(taskId, user);
         access.ensureCanManageTasks(task.getProject(), user);
         access.ensureActive(task.getProject());
+        task.setAssignee(assigneeId == null ? null : access.requireParticipantUser(task.getProject(), assigneeId));
+        return taskRepository.save(task);
+    }
+
+    @Transactional
+    public void deleteTask(Long taskId, User user) {
+        Task task = findVisibleTask(taskId, user);
+        access.ensureCanManageTasks(task.getProject(), user);
+        access.ensureActive(task.getProject());
+        taskFileService.deleteAllForTask(task);
         taskRepository.delete(task);
     }
 
-    private Task findTaskForParticipant(Long taskId, User user) {
+    private Task findVisibleTask(Long taskId, User user) {
         return taskRepository.findById(taskId)
-                .filter(task -> access.roleOf(task.getProject(), user).isPresent())
+                .filter(task -> access.canSeeTask(task, user))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarefa não encontrada."));
     }
 }

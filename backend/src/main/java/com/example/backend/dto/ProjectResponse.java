@@ -19,7 +19,8 @@ public record ProjectResponse(
         ProjectType type,
         ProjectStatus status,
         ProjectRole myRole,
-        UserSummary owner
+        UserSummary owner,
+        boolean contractorsSeeAllTasks
 ) {
     public static ProjectResponse from(Project project, User viewer) {
         ProjectRole role = ProjectAccessService.isOwner(project, viewer) ? ProjectRole.OWNER : ProjectRole.MEMBER;
@@ -31,7 +32,8 @@ public record ProjectResponse(
                 project.getType(),
                 project.getStatus(),
                 role,
-                UserSummary.from(project.getCreatedByUser())
+                UserSummary.from(project.getCreatedByUser()),
+                project.isContractorsSeeAllTasks()
         );
     }
 }

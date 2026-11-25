@@ -1,35 +1,26 @@
-import { useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { InfiniteCanvas } from "@/components/canvas/InfiniteCanvas";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { TASKS } from "@/lib/atelie-data";
+import { api, type ApiTask } from "@/lib/api";
 
+// Cada tarefa tem o seu Canvas (aberto pelo botão na tela da tarefa).
+// O Canvas global do projeto e a sincronização em tempo real ficam como trabalho futuro.
 export const Route = createFileRoute("/_authenticated/canvas")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    task: typeof search["task"] === "string" ? search["task"] : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): { task?: number } => {
+    const raw = search["task"];
+    const task = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+    return Number.isInteger(task) && task > 0 ? { task } : {};
+  },
   head: () => ({
     meta: [
       { title: "Canvas Infinito — Art Hub" },
       {
         name: "description",
-        content:
-          "Moodboard infinito com notas adesivas, referências e vetores para cada tarefa do projeto.",
-      },
-      { property: "og:title", content: "Canvas Infinito — Art Hub" },
-      {
-        property: "og:description",
-        content:
-          "Colaboração visual em canvas macro do projeto ou no canvas de uma tarefa específica.",
+        content: "Painel infinito de referências de cada tarefa, estilo PureRef.",
       },
     ],
   }),
@@ -37,45 +28,69 @@ export const Route = createFileRoute("/_authenticated/canvas")({
 });
 
 function CanvasPage() {
-  const { task } = Route.useSearch();
-  const navigate = useNavigate({ from: "/canvas" });
-  const [value, setValue] = useState<string>(task ?? "macro");
+  const { task: taskParam } = Route.useSearch();
+  const taskId = taskParam ?? null;
+  const [task, setTask] = useState<ApiTask | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const selected = TASKS.find((t) => t.id === value);
-  const label = selected
-    ? `Canvas da Tarefa: ${selected.title}`
-    : "Canvas Macro do Projeto (Moodboard Geral)";
+  useEffect(() => {
+    if (taskId === null) return;
+    let active = true;
+    api
+      .task(taskId)
+      .then((loaded) => active && setTask(loaded))
+      .catch(
+        (e: unknown) =>
+          active && setError(e instanceof Error ? e.message : "Tarefa não encontrada."),
+      );
+    return () => {
+      active = false;
+    };
+  }, [taskId]);
+
+  if (taskId === null) {
+    return (
+      <AppLayout title="Canvas Infinito" subtitle="Referências por tarefa">
+        <div className="glass rounded-2xl p-8 text-center">
+          <p className="font-medium">O Canvas agora fica dentro de cada tarefa.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Abra um projeto, entre em uma tarefa e use o botão “Abrir Canvas infinito”.
+          </p>
+          <Link to="/projetos" className="mt-4 inline-block text-sm text-primary hover:underline">
+            Ir para Projetos
+          </Link>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
-    <AppLayout title="Canvas Infinito" subtitle="Colaboração visual em tempo real">
+    <AppLayout title="Canvas Infinito" subtitle={task ? task.title : "Carregando tarefa..."}>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Select
-          value={value}
-          onValueChange={(v) => {
-            setValue(v);
-            navigate({ search: { task: v === "macro" ? undefined : v } });
-          }}
-        >
-          <SelectTrigger className="glass w-80">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="macro">Canvas Macro do Projeto</SelectItem>
-            {TASKS.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                Canvas da Tarefa: {t.title}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {selected && (
+        {task && (
+          <Link
+            to="/projetos/$projectId/tarefas/$taskId"
+            params={{ projectId: String(task.projectId), taskId: String(task.id) }}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-3" /> Voltar para a tarefa
+          </Link>
+        )}
+        {task?.deadline && (
           <Badge variant="outline" className="border-neon/50 text-neon">
-            Prazo {selected.deadline} · {selected.client}
+            Prazo {new Date(`${task.deadline}T00:00:00`).toLocaleDateString("pt-BR")}
           </Badge>
         )}
       </div>
-
-      <InfiniteCanvas contextLabel={label} />
+      {error ? (
+        <div role="alert" className="glass rounded-2xl p-4 text-sm text-destructive">
+          {error}
+        </div>
+      ) : (
+        <InfiniteCanvas
+          contextLabel={task ? `Canvas da tarefa: ${task.title}` : "Canvas da tarefa"}
+        />
+      )}
     </AppLayout>
   );
 }

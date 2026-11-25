@@ -18,6 +18,7 @@ import { Route as AuthenticatedKanbanRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedShowcaseRouteImport } from './routes/_authenticated/showcase'
 import { Route as AuthenticatedProjetosIndexRouteImport } from './routes/_authenticated/projetos.index'
 import { Route as AuthenticatedProjetosProjectIdRouteImport } from './routes/_authenticated/projetos.$projectId'
+import { Route as AuthenticatedProjetosProjectIdTarefasTaskIdRouteImport } from './routes/_authenticated/projetos.$projectId_.tarefas.$taskId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -65,6 +66,12 @@ const AuthenticatedProjetosProjectIdRoute =
     path: '/projetos/$projectId',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedProjetosProjectIdTarefasTaskIdRoute =
+  AuthenticatedProjetosProjectIdTarefasTaskIdRouteImport.update({
+    id: '/projetos/$projectId_/tarefas/$taskId',
+    path: '/projetos/$projectId/tarefas/$taskId',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -75,6 +82,7 @@ export interface FileRoutesByFullPath {
   '/showcase': typeof AuthenticatedShowcaseRoute
   '/projetos/$projectId': typeof AuthenticatedProjetosProjectIdRoute
   '/projetos/': typeof AuthenticatedProjetosIndexRoute
+  '/projetos/$projectId/tarefas/$taskId': typeof AuthenticatedProjetosProjectIdTarefasTaskIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -85,6 +93,7 @@ export interface FileRoutesByTo {
   '/showcase': typeof AuthenticatedShowcaseRoute
   '/projetos/$projectId': typeof AuthenticatedProjetosProjectIdRoute
   '/projetos': typeof AuthenticatedProjetosIndexRoute
+  '/projetos/$projectId/tarefas/$taskId': typeof AuthenticatedProjetosProjectIdTarefasTaskIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -97,6 +106,7 @@ export interface FileRoutesById {
   '/_authenticated/showcase': typeof AuthenticatedShowcaseRoute
   '/_authenticated/projetos/$projectId': typeof AuthenticatedProjetosProjectIdRoute
   '/_authenticated/projetos/': typeof AuthenticatedProjetosIndexRoute
+  '/_authenticated/projetos/$projectId_/tarefas/$taskId': typeof AuthenticatedProjetosProjectIdTarefasTaskIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -109,6 +119,7 @@ export interface FileRouteTypes {
     | '/showcase'
     | '/projetos/$projectId'
     | '/projetos/'
+    | '/projetos/$projectId/tarefas/$taskId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -119,6 +130,7 @@ export interface FileRouteTypes {
     | '/showcase'
     | '/projetos/$projectId'
     | '/projetos'
+    | '/projetos/$projectId/tarefas/$taskId'
   id:
     | '__root__'
     | '/'
@@ -130,6 +142,7 @@ export interface FileRouteTypes {
     | '/_authenticated/showcase'
     | '/_authenticated/projetos/$projectId'
     | '/_authenticated/projetos/'
+    | '/_authenticated/projetos/$projectId_/tarefas/$taskId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -203,6 +216,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjetosProjectIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/projetos/$projectId_/tarefas/$taskId': {
+      id: '/_authenticated/projetos/$projectId_/tarefas/$taskId'
+      path: '/projetos/$projectId/tarefas/$taskId'
+      fullPath: '/projetos/$projectId/tarefas/$taskId'
+      preLoaderRoute: typeof AuthenticatedProjetosProjectIdTarefasTaskIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -213,6 +233,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedShowcaseRoute: typeof AuthenticatedShowcaseRoute
   AuthenticatedProjetosProjectIdRoute: typeof AuthenticatedProjetosProjectIdRoute
   AuthenticatedProjetosIndexRoute: typeof AuthenticatedProjetosIndexRoute
+  AuthenticatedProjetosProjectIdTarefasTaskIdRoute: typeof AuthenticatedProjetosProjectIdTarefasTaskIdRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -222,6 +243,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedShowcaseRoute: AuthenticatedShowcaseRoute,
   AuthenticatedProjetosProjectIdRoute: AuthenticatedProjetosProjectIdRoute,
   AuthenticatedProjetosIndexRoute: AuthenticatedProjetosIndexRoute,
+  AuthenticatedProjetosProjectIdTarefasTaskIdRoute:
+    AuthenticatedProjetosProjectIdTarefasTaskIdRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

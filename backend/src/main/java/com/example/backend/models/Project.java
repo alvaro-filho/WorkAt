@@ -30,6 +30,10 @@ public class Project {
     @Column(nullable = false, columnDefinition = "varchar(20) default 'ACTIVE'")
     private ProjectStatus status = ProjectStatus.ACTIVE;
 
+    // Só vale no corporativo: se true, contratados veem todas as tarefas, e não só as atribuídas a eles.
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean contractorsSeeAllTasks = false;
+
     // Relacionamento opcional com o Criador do Projeto (usuário)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id", nullable = false)
@@ -90,6 +94,14 @@ public class Project {
 
     public void setStatus(ProjectStatus status) {
         this.status = status;
+    }
+
+    public boolean isContractorsSeeAllTasks() {
+        return contractorsSeeAllTasks;
+    }
+
+    public void setContractorsSeeAllTasks(boolean contractorsSeeAllTasks) {
+        this.contractorsSeeAllTasks = contractorsSeeAllTasks;
     }
 
     public User getCreatedByUser() {

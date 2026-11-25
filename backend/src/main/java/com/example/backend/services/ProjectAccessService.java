@@ -1,9 +1,11 @@
 package com.example.backend.services;
 
 import com.example.backend.models.Project;
+import com.example.backend.models.ProjectMember;
 import com.example.backend.models.ProjectRole;
 import com.example.backend.models.ProjectStatus;
 import com.example.backend.models.ProjectType;
+import com.example.backend.models.Task;
 import com.example.backend.models.User;
 import com.example.backend.repositories.ProjectMemberRepository;
 import com.example.backend.repositories.ProjectRepository;
@@ -77,17 +79,52 @@ public class ProjectAccessService {
     }
 
     /**
-     * Mover tarefas: dono sempre; membros no cooperativo.
-     * No corporativo, o contratado vai poder mover as tarefas atribuídas a ele (fatia 2).
+     * Ver a tarefa: qualquer participante, exceto no corporativo, onde o contratado
+     * só vê as tarefas atribuídas a ele (a menos que o dono libere ver todas).
      */
-    public void ensureCanMoveTasks(Project project, User user) {
-        if (isOwner(project, user)) {
+    public boolean canSeeTask(Task task, User user) {
+        Project project = task.getProject();
+        Optional<ProjectRole> role = roleOf(project, user);
+        if (role.isEmpty()) {
+            return false;
+        }
+        if (role.get() == ProjectRole.OWNER || project.getType() != ProjectType.CORPORATE) {
+            return true;
+        }
+        return project.isContractorsSeeAllTasks() || sameUser(task.getAssignee(), user);
+    }
+
+    /**
+     * Trabalhar na tarefa (mover e enviar arquivos): dono sempre; membros no cooperativo;
+     * no corporativo, só o contratado responsável por ela.
+     */
+    public void ensureCanWorkOnTask(Task task, User user) {
+        Project project = task.getProject();
+        if (isOwner(project, user) || project.getType() == ProjectType.COOPERATIVE) {
             return;
         }
-        if (project.getType() != ProjectType.COOPERATIVE) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Neste projeto só o dono pode mover as tarefas.");
+        if (project.getType() == ProjectType.CORPORATE && sameUser(task.getAssignee(), user)) {
+            return;
         }
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                project.getType() == ProjectType.CORPORATE
+                        ? "Você só pode trabalhar nas tarefas atribuídas a você."
+                        : "Neste projeto só o dono pode mexer nas tarefas.");
+    }
+
+    /** Usuário participante do projeto com esse id (dono ou membro); 400 se não participa. */
+    @Transactional(readOnly = true)
+    public User requireParticipantUser(Project project, Long userId) {
+        User owner = project.getCreatedByUser();
+        if (owner != null && Objects.equals(owner.getId(), userId)) {
+            return owner;
+        }
+        return memberRepository.findByProjectOrderByJoinedAtAsc(project).stream()
+                .map(ProjectMember::getUser)
+                .filter(candidate -> Objects.equals(candidate.getId(), userId))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "O responsável precisa participar do projeto."));
     }
 
     public void ensureActive(Project project) {

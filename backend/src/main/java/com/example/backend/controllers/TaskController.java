@@ -1,5 +1,6 @@
 package com.example.backend.controllers;
 
+import com.example.backend.dto.TaskAssigneeRequest;
 import com.example.backend.dto.TaskCreateRequest;
 import com.example.backend.dto.TaskResponse;
 import com.example.backend.dto.TaskStatusUpdateRequest;
@@ -42,6 +43,20 @@ public class TaskController {
         List<TaskResponse> response = taskService.listTasks(projectId, creator).stream()
                 .map(TaskResponse::from).toList();
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/api/v1/tasks/{taskId}")
+    public ResponseEntity<TaskResponse> getTask(@PathVariable Long taskId, Authentication authentication) {
+        User user = findAuthenticatedUser(authentication);
+        return ResponseEntity.ok(TaskResponse.from(taskService.getTask(taskId, user)));
+    }
+
+    @PatchMapping("/api/v1/tasks/{taskId}/assignee")
+    public ResponseEntity<TaskResponse> assign(@PathVariable Long taskId,
+                                               @RequestBody TaskAssigneeRequest request,
+                                               Authentication authentication) {
+        User user = findAuthenticatedUser(authentication);
+        return ResponseEntity.ok(TaskResponse.from(taskService.assign(taskId, user, request.getUserId())));
     }
 
     @PatchMapping("/api/v1/tasks/{taskId}/status")

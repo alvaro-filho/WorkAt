@@ -5,6 +5,7 @@ import com.example.backend.dto.InvitationResponse;
 import com.example.backend.dto.ProjectCreateRequest;
 import com.example.backend.dto.ProjectMemberResponse;
 import com.example.backend.dto.ProjectResponse;
+import com.example.backend.dto.ProjectSettingsRequest;
 import com.example.backend.dto.ProjectStatusUpdateRequest;
 import com.example.backend.models.User;
 import com.example.backend.repositories.UserRepository;
@@ -67,6 +68,15 @@ public class ProjectController {
         User user = findAuthenticatedUser(authentication);
         return ResponseEntity.ok(ProjectResponse.from(
                 projectService.updateStatus(projectId, user, request.getStatus()), user));
+    }
+
+    @PatchMapping("/{projectId}/settings")
+    public ResponseEntity<ProjectResponse> updateSettings(@PathVariable Long projectId,
+                                                          @RequestBody ProjectSettingsRequest request,
+                                                          Authentication authentication) {
+        User user = findAuthenticatedUser(authentication);
+        return ResponseEntity.ok(ProjectResponse.from(
+                projectService.updateSettings(projectId, user, request.getContractorsSeeAllTasks()), user));
     }
 
     @DeleteMapping("/{projectId}")

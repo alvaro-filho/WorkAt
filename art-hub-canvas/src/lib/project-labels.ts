@@ -72,3 +72,21 @@ export function makeSlug(name: string) {
       .replace(/^-|-$/g, "") || "projeto";
   return `${base}-${Math.random().toString(36).slice(2, 7)}`;
 }
+
+/**
+ * Pode trabalhar na tarefa (mover, enviar arquivos)? Espelha ProjectAccessService.ensureCanWorkOnTask:
+ * dono e membros do cooperativo sempre; no corporativo, só o contratado responsável pela tarefa.
+ */
+export function canWorkOnTask(
+  project: Project,
+  task: { assignee: { id: number } | null },
+  userId: number | string | undefined,
+) {
+  if (project.status !== "ACTIVE") return false;
+  if (project.myRole === "OWNER" || project.type === "COOPERATIVE") return true;
+  return (
+    project.type === "CORPORATE" &&
+    task.assignee !== null &&
+    String(task.assignee.id) === String(userId)
+  );
+}

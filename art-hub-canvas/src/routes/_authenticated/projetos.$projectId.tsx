@@ -5,7 +5,6 @@ import { ArrowLeft, LogOut, Mail, UserMinus } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { GanttView } from "@/components/kanban/GanttView";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
-import { TaskDetailModal } from "@/components/kanban/TaskDetailModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   api,
@@ -31,7 +31,13 @@ import {
   type ProjectInvitation,
   type ProjectMember,
 } from "@/lib/api";
-import { projectPermissions, projectTypeInfo, roleLabel } from "@/lib/project-labels";
+import { useAuth } from "@/lib/AuthContext";
+import {
+  canWorkOnTask,
+  projectPermissions,
+  projectTypeInfo,
+  roleLabel,
+} from "@/lib/project-labels";
 
 export const Route = createFileRoute("/_authenticated/projetos/$projectId")({
   head: () => ({ meta: [{ title: "Projeto — Art Hub" }] }),
@@ -41,9 +47,11 @@ export const Route = createFileRoute("/_authenticated/projetos/$projectId")({
 function ProjectPage() {
   const { projectId: projectIdParam } = Route.useParams();
   const projectId = Number(projectIdParam);
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<ApiTask[]>([]);
-  const [selectedTask, setSelectedTask] = useState<ApiTask | null>(null);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +67,13 @@ function ProjectPage() {
       ]);
       setProject(loadedProject);
       setTasks(loadedTasks);
+      // Para o campo "Responsável" ao criar tarefa (só quem pode criar tarefas precisa da lista).
+      if (loadedProject.type !== "PERSONAL") {
+        api
+          .members(projectId)
+          .then(setMembers)
+          .catch(() => setMembers([]));
+      }
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) setNotFound(true);
       else setError(e instanceof Error ? e.message : "Não foi possível carregar o projeto.");
@@ -113,6 +128,7 @@ function ProjectPage() {
     description: string;
     priority: ApiPriority;
     deadline?: string;
+    assigneeId?: number;
   }) => {
     const task = await api.createTask(project.id, data);
     setTasks((items) => [...items, task]);
@@ -121,15 +137,16 @@ function ProjectPage() {
   const moveTask = async (taskId: number, status: ApiTaskStatus) => {
     const updated = await api.updateTaskStatus(taskId, status);
     setTasks((items) => items.map((task) => (task.id === taskId ? updated : task)));
-    setSelectedTask((task) => (task?.id === taskId ? updated : task));
     return updated;
   };
 
-  const deleteTask = async (taskId: number) => {
-    await api.deleteTask(taskId);
-    setTasks((items) => items.filter((task) => task.id !== taskId));
-    setSelectedTask((task) => (task?.id === taskId ? null : task));
-  };
+  const assigneeOptions =
+    project.type === "PERSONAL"
+      ? []
+      : [
+          ...(project.owner ? [{ id: project.owner.id, fullName: project.owner.fullName }] : []),
+          ...members.map((member) => ({ id: member.user.id, fullName: member.user.fullName })),
+        ];
 
   return (
     <AppLayout
@@ -189,15 +206,23 @@ function ProjectPage() {
             error={null}
             closed={closed}
             canManageTasks={permissions.canManageTasks}
-            canMoveTasks={permissions.canMoveTasks}
+            canMoveTask={(task) => canWorkOnTask(project, task, user?.id)}
+            assigneeOptions={assigneeOptions}
             readOnlyHint={
               project.type === "CORPORATE" && !permissions.owner
-                ? "Neste projeto corporativo, as tarefas são criadas e organizadas pelo contratante."
+                ? project.contractorsSeeAllTasks
+                  ? "Você vê todas as tarefas do projeto, mas só move e envia arquivos nas atribuídas a você."
+                  : "Aqui aparecem só as tarefas atribuídas a você. Abra uma para enviar seus arquivos."
                 : undefined
             }
             onCreateTask={createTask}
             onMoveTask={moveTask}
-            onOpenTask={setSelectedTask}
+            onOpenTask={(task) =>
+              navigate({
+                to: "/projetos/$projectId/tarefas/$taskId",
+                params: { projectId: String(project.id), taskId: String(task.id) },
+              })
+            }
           />
         </TabsContent>
 
@@ -217,13 +242,6 @@ function ProjectPage() {
           </TabsContent>
         )}
       </Tabs>
-
-      <TaskDetailModal
-        task={selectedTask}
-        readOnly={!permissions.canManageTasks}
-        onDeleteTask={deleteTask}
-        onOpenChange={(open) => !open && setSelectedTask(null)}
-      />
     </AppLayout>
   );
 }
@@ -482,6 +500,20 @@ function SettingsTab({
     }
   };
 
+  const toggleVisibility = async (checked: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      onProjectChange(
+        await api.updateProjectSettings(project.id, { contractorsSeeAllTasks: checked }),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível salvar a configuração.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const remove = async () => {
     setBusy(true);
     setError(null);
@@ -523,10 +555,23 @@ function SettingsTab({
         )}
       </div>
       {project.type === "CORPORATE" && (
-        <p className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">
-          Em breve: ativar NDA neste projeto, para que as artes só sejam publicadas quando você
-          liberar.
-        </p>
+        <div className="flex items-start justify-between gap-4 border-t border-border pt-4">
+          <div>
+            <Label htmlFor="contractorsSeeAll" className="text-sm font-semibold">
+              Contratados veem todas as tarefas
+            </Label>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Desligado: cada contratado vê só as tarefas atribuídas a ele. Ligado: todos veem o
+              quadro inteiro, mas cada um só mexe nas suas.
+            </p>
+          </div>
+          <Switch
+            id="contractorsSeeAll"
+            checked={project.contractorsSeeAllTasks}
+            disabled={busy}
+            onCheckedChange={(checked) => void toggleVisibility(checked)}
+          />
+        </div>
       )}
       {error && (
         <p role="alert" className="text-sm text-destructive">

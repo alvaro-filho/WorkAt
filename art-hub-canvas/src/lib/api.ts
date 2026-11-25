@@ -33,6 +33,22 @@ export interface Project {
   /** Papel do usuário logado neste projeto. */
   myRole: ProjectRole;
   owner: UserSummary | null;
+  /** Corporativo: contratados veem todas as tarefas (e não só as atribuídas a eles). */
+  contractorsSeeAllTasks: boolean;
+}
+
+export interface TaskFile {
+  id: number;
+  taskId: number;
+  originalName: string;
+  contentType: string;
+  sizeBytes: number;
+  version: number;
+  finalImage: boolean;
+  /** O navegador consegue mostrar como imagem (PNG, JPG, WEBP, GIF). */
+  image: boolean;
+  uploadedBy: UserSummary;
+  createdAt: string;
 }
 
 export interface ProjectMember {
@@ -89,6 +105,7 @@ export interface ApiTask {
   status: ApiTaskStatus;
   deadline: string | null;
   projectId: number;
+  assignee: UserSummary | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -131,7 +148,9 @@ async function request<T>(
   }
 
   const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  // FormData (upload) define o próprio Content-Type com o boundary; não pode ser sobrescrito.
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type"))
+    headers.set("Content-Type", "application/json");
 
   const token = window.localStorage.getItem("authToken");
   if (token && options.sendAuthorization !== false) headers.set("Authorization", `Bearer ${token}`);
@@ -226,7 +245,13 @@ export const api = {
   tasks: (projectId: number) => request<ApiTask[]>(`/projects/${projectId}/tasks`),
   createTask: (
     projectId: number,
-    payload: { title: string; description?: string; priority?: ApiPriority; deadline?: string },
+    payload: {
+      title: string;
+      description?: string;
+      priority?: ApiPriority;
+      deadline?: string;
+      assigneeId?: number | undefined;
+    },
   ) =>
     request<ApiTask>(`/projects/${projectId}/tasks`, {
       method: "POST",
@@ -238,6 +263,21 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
   deleteTask: (taskId: number) => request<void>(`/tasks/${taskId}`, { method: "DELETE" }),
+  task: (taskId: number) => request<ApiTask>(`/tasks/${taskId}`, {}, { authFailure: "verify-session" }),
+  assignTask: (taskId: number, userId: number | null) =>
+    request<ApiTask>(`/tasks/${taskId}/assignee`, {
+      method: "PATCH",
+      body: JSON.stringify({ userId }),
+    }),
+  taskFiles: (taskId: number) =>
+    request<TaskFile[]>(`/tasks/${taskId}/files`, {}, { authFailure: "verify-session" }),
+  markFinalFile: (fileId: number) => request<TaskFile>(`/files/${fileId}/final`, { method: "POST" }),
+  deleteFile: (fileId: number) => request<void>(`/files/${fileId}`, { method: "DELETE" }),
+  updateProjectSettings: (projectId: number, payload: { contractorsSeeAllTasks: boolean }) =>
+    request<Project>(`/projects/${projectId}/settings`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   updateProjectStatus: (projectId: number, status: Project["status"]) =>
     request<Project>(`/projects/${projectId}/status`, {
       method: "PATCH",
@@ -284,3 +324,53 @@ export const api = {
       { authFailure: "ignore", sendAuthorization: false },
     ),
 };
+
+/**
+ * Envia um arquivo para a tarefa com progresso (XHR, porque o fetch não informa o progresso do upload).
+ */
+export function uploadTaskFile(
+  taskId: number,
+  file: File,
+  options: { markAsFinal?: boolean; onProgress?: (percent: number) => void } = {},
+): Promise<TaskFile> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("final", String(Boolean(options.markAsFinal)));
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/v1/tasks/${taskId}/files`);
+    const token = window.localStorage.getItem("authToken");
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) options.onProgress?.(Math.round((event.loaded / event.total) * 100));
+    };
+    xhr.onload = () => {
+      let data: unknown;
+      try {
+        data = xhr.responseText ? JSON.parse(xhr.responseText) : undefined;
+      } catch {
+        data = xhr.responseText;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data as TaskFile);
+      else {
+        const message =
+          data && typeof data === "object" && "message" in data && typeof data.message === "string"
+            ? data.message
+            : `O envio falhou (${xhr.status}).`;
+        reject(new ApiError(message, xhr.status));
+      }
+    };
+    xhr.onerror = () => reject(new ApiError("Falha de rede ao enviar o arquivo.", 0));
+    xhr.send(form);
+  });
+}
+
+/** Baixa o conteúdo de um arquivo com o token (não existe link público para arquivo privado). */
+export async function fetchFileBlob(fileId: number): Promise<Blob> {
+  const token = window.localStorage.getItem("authToken");
+  const response = await fetch(`/api/v1/files/${fileId}/content`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new ApiError(`Não foi possível baixar o arquivo (${response.status}).`, response.status);
+  return response.blob();
+}

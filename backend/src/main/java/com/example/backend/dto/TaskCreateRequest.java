@@ -20,6 +20,12 @@ public class TaskCreateRequest {
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate deadline;
 
+    /** Responsável opcional (id de um participante do projeto). */
+    private Long assigneeId;
+
+    public Long getAssigneeId() { return assigneeId; }
+    public void setAssigneeId(Long assigneeId) { this.assigneeId = assigneeId; }
+
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
     public String getDescription() { return description; }

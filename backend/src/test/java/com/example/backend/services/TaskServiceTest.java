@@ -33,7 +33,8 @@ class TaskServiceTest {
         projectRepository = mock(ProjectRepository.class);
         taskRepository = mock(TaskRepository.class);
         memberRepository = mock(ProjectMemberRepository.class);
-        taskService = new TaskService(new ProjectAccessService(projectRepository, memberRepository), taskRepository);
+        taskService = new TaskService(new ProjectAccessService(projectRepository, memberRepository), taskRepository,
+                mock(TaskFileService.class));
         creator = new User();
         project = new Project();
         project.setId(15L);

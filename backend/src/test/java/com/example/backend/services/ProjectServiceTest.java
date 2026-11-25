@@ -35,7 +35,8 @@ class ProjectServiceTest {
         memberRepository = mock(ProjectMemberRepository.class);
         invitationRepository = mock(ProjectInvitationRepository.class);
         projectService = new ProjectService(projectRepository, taskRepository, activityEventRepository,
-                memberRepository, invitationRepository, new ProjectAccessService(projectRepository, memberRepository));
+                memberRepository, invitationRepository, new ProjectAccessService(projectRepository, memberRepository),
+                mock(TaskFileService.class));
         creator = new User();
         project = new Project();
         project.setId(31L);

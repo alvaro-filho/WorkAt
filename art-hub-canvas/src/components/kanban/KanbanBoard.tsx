@@ -42,7 +42,8 @@ export function KanbanBoard({
   error,
   closed,
   canManageTasks,
-  canMoveTasks,
+  canMoveTask,
+  assigneeOptions = [],
   readOnlyHint,
   onCreateTask,
   onMoveTask,
@@ -54,7 +55,10 @@ export function KanbanBoard({
   /** Projeto encerrado: tudo somente leitura. */
   closed: boolean;
   canManageTasks: boolean;
-  canMoveTasks: boolean;
+  /** Se o usuário pode arrastar esta tarefa (no corporativo, o contratado só move as dele). */
+  canMoveTask: (task: ApiTask) => boolean;
+  /** Participantes que podem ser responsáveis por uma tarefa (vazio = sem campo de responsável). */
+  assigneeOptions?: { id: number; fullName: string }[];
   /** Explica por que o usuário não pode mexer no quadro (ex.: contratado no corporativo). */
   readOnlyHint?: string | undefined;
   onCreateTask: (data: {
@@ -62,6 +66,7 @@ export function KanbanBoard({
     description: string;
     priority: ApiPriority;
     deadline?: string;
+    assigneeId?: number;
   }) => Promise<void>;
   onMoveTask: (taskId: number, status: ApiTaskStatus) => Promise<ApiTask>;
   onOpenTask: (task: ApiTask) => void;
@@ -76,14 +81,14 @@ export function KanbanBoard({
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<ApiPriority>("MEDIUM");
   const [deadline, setDeadline] = useState("");
-  const draggable = canMoveTasks && !closed;
+  const [assigneeId, setAssigneeId] = useState("");
+  const canDrag = (task: ApiTask) => !closed && canMoveTask(task);
 
   useEffect(() => setLocalTasks(tasks), [tasks]);
 
   const move = async (id: number, status: TaskStatus) => {
-    if (!draggable) return;
     const task = localTasks.find((item) => item.id === id);
-    if (!task || toUiStatus[task.status] === status) return;
+    if (!task || !canDrag(task) || toUiStatus[task.status] === status) return;
     const previous = localTasks;
     setLocalTasks((items) =>
       items.map((item) => (item.id === id ? { ...item, status: toApiStatus[status] } : item)),
@@ -104,11 +109,18 @@ export function KanbanBoard({
     setBusy(true);
     setFormError(null);
     try {
-      await onCreateTask({ title, description, priority, ...(deadline ? { deadline } : {}) });
+      await onCreateTask({
+        title,
+        description,
+        priority,
+        ...(deadline ? { deadline } : {}),
+        ...(assigneeId ? { assigneeId: Number(assigneeId) } : {}),
+      });
       setTitle("");
       setDescription("");
       setDeadline("");
       setPriority("MEDIUM");
+      setAssigneeId("");
       setTaskForm(false);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Não foi possível criar a tarefa.");
@@ -190,6 +202,24 @@ export function KanbanBoard({
                   onChange={(e) => setDeadline(e.target.value)}
                 />
               </div>
+              {assigneeOptions.length > 0 && (
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="newTaskAssignee">Responsável</Label>
+                  <select
+                    id="newTaskAssignee"
+                    value={assigneeId}
+                    onChange={(e) => setAssigneeId(e.target.value)}
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Sem responsável</option>
+                    {assigneeOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <Button type="submit" disabled={busy}>
                 {busy ? "Criando..." : "Criar tarefa"}
               </Button>
@@ -227,13 +257,12 @@ export function KanbanBoard({
               <section
                 key={col.id}
                 onDragOver={(e) => {
-                  if (!draggable) return;
+                  if (dragging === null) return;
                   e.preventDefault();
                   setOverColumn(col.id);
                 }}
                 onDragLeave={() => setOverColumn((c) => (c === col.id ? null : c))}
                 onDrop={() => {
-                  if (!draggable) return;
                   if (dragging !== null) void move(dragging, col.id);
                   setDragging(null);
                   setOverColumn(null);
@@ -247,46 +276,60 @@ export function KanbanBoard({
                   </Badge>
                 </header>
                 <div className="flex min-h-40 flex-col gap-3">
-                  {items.map((task) => (
-                    <article
-                      key={task.id}
-                      draggable={draggable}
-                      onDragStart={() => draggable && setDragging(task.id)}
-                      onDragEnd={() => setDragging(null)}
-                      onClick={() => onOpenTask(task)}
-                      className={`glass glass-hover cursor-pointer rounded-xl p-3 ${dragging === task.id ? "opacity-50" : ""}`}
-                    >
-                      <div className="flex items-start gap-2">
-                        {draggable && (
-                          <GripVertical className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                  {items.map((task) => {
+                    const draggable = canDrag(task);
+                    return (
+                      <article
+                        key={task.id}
+                        draggable={draggable}
+                        onDragStart={() => draggable && setDragging(task.id)}
+                        onDragEnd={() => setDragging(null)}
+                        onClick={() => onOpenTask(task)}
+                        className={`glass glass-hover cursor-pointer rounded-xl p-3 ${dragging === task.id ? "opacity-50" : ""}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          {draggable && (
+                            <GripVertical className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                          )}
+                          <p className="min-w-0 text-sm font-medium">{task.title}</p>
+                        </div>
+                        {task.description && (
+                          <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                            {task.description}
+                          </p>
                         )}
-                        <p className="min-w-0 text-sm font-medium">{task.title}</p>
-                      </div>
-                      {task.description && (
-                        <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                          {task.description}
-                        </p>
-                      )}
-                      <div className="mt-3 flex items-center justify-between gap-2">
-                        <Badge
-                          variant="outline"
-                          className={
-                            task.priority === "HIGH"
-                              ? "border-destructive/50 text-destructive"
-                              : task.priority === "MEDIUM"
-                                ? "border-primary/50 text-primary"
-                                : "border-neon/50 text-neon"
-                          }
-                        >
-                          {priorities[task.priority]}
-                        </Badge>
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <CalendarClock className="size-3" />
-                          {formatDeadline(task.deadline)}
-                        </span>
-                      </div>
-                    </article>
-                  ))}
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <Badge
+                            variant="outline"
+                            className={
+                              task.priority === "HIGH"
+                                ? "border-destructive/50 text-destructive"
+                                : task.priority === "MEDIUM"
+                                  ? "border-primary/50 text-primary"
+                                  : "border-neon/50 text-neon"
+                            }
+                          >
+                            {priorities[task.priority]}
+                          </Badge>
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <CalendarClock className="size-3" />
+                            {formatDeadline(task.deadline)}
+                          </span>
+                        </div>
+                        {task.assignee && (
+                          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                            <span
+                              aria-hidden="true"
+                              className="flex size-5 items-center justify-center rounded-full bg-white/10 text-[10px] font-semibold text-foreground"
+                            >
+                              {task.assignee.fullName.slice(0, 1).toUpperCase()}
+                            </span>
+                            <span className="truncate">{task.assignee.fullName}</span>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               </section>
             );

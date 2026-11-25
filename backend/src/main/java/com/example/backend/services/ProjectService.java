@@ -3,6 +3,7 @@ package com.example.backend.services;
 import com.example.backend.models.Project;
 import com.example.backend.models.ProjectMember;
 import com.example.backend.models.ProjectStatus;
+import com.example.backend.models.ProjectType;
 import com.example.backend.models.User;
 import com.example.backend.repositories.ActivityEventRepository;
 import com.example.backend.repositories.ProjectInvitationRepository;
@@ -32,18 +33,21 @@ public class ProjectService {
     private final ProjectMemberRepository memberRepository;
     private final ProjectInvitationRepository invitationRepository;
     private final ProjectAccessService access;
+    private final TaskFileService taskFileService;
 
     public ProjectService(ProjectRepository projectRepository, TaskRepository taskRepository,
                           ActivityEventRepository activityEventRepository,
                           ProjectMemberRepository memberRepository,
                           ProjectInvitationRepository invitationRepository,
-                          ProjectAccessService access) {
+                          ProjectAccessService access,
+                          TaskFileService taskFileService) {
         this.projectRepository = projectRepository;
         this.taskRepository = taskRepository;
         this.activityEventRepository = activityEventRepository;
         this.memberRepository = memberRepository;
         this.invitationRepository = invitationRepository;
         this.access = access;
+        this.taskFileService = taskFileService;
     }
 
     /** Projetos em que o usuário participa: os que ele criou e os em que é membro. */
@@ -91,6 +95,20 @@ public class ProjectService {
         return projectRepository.save(project);
     }
 
+    /** Configurações do dono. Hoje: no corporativo, se os contratados veem todas as tarefas. */
+    @Transactional
+    public Project updateSettings(Long projectId, User user, Boolean contractorsSeeAllTasks) {
+        Project project = access.requireOwner(projectId, user);
+        if (contractorsSeeAllTasks != null) {
+            if (project.getType() != ProjectType.CORPORATE) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Essa opção só existe em projetos corporativos.");
+            }
+            project.setContractorsSeeAllTasks(contractorsSeeAllTasks);
+        }
+        return projectRepository.save(project);
+    }
+
     @Transactional
     public void deleteProject(Long projectId, User user) {
         Project project = access.requireOwner(projectId, user);
@@ -100,6 +118,7 @@ public class ProjectService {
         }
 
         activityEventRepository.deleteByProject(project);
+        taskFileService.deleteAllForProject(project);
         taskRepository.deleteByProject(project);
         invitationRepository.deleteByProject(project);
         memberRepository.deleteByProject(project);

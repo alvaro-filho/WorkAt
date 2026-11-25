@@ -11,3 +11,7 @@ node_modules/
 .output/
 .nitro/
 .vinxi/
+
+# Arquivos enviados nas tarefas (armazenamento local de desenvolvimento)
+backend/uploads/
+uploads/
