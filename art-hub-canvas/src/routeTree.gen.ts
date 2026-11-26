@@ -11,17 +11,18 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
+import { Route as PublicRouteImport } from './routes/_public'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedCanvasRouteImport } from './routes/_authenticated/canvas'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as AuthenticatedExplorarRouteImport } from './routes/_authenticated/explorar'
 import { Route as AuthenticatedKanbanRouteImport } from './routes/_authenticated/kanban'
-import { Route as AuthenticatedPublicacoesRouteImport } from './routes/_authenticated/publicacoes'
 import { Route as AuthenticatedShowcaseRouteImport } from './routes/_authenticated/showcase'
+import { Route as PublicExplorarRouteImport } from './routes/_public/explorar'
+import { Route as PublicPublicacoesRouteImport } from './routes/_public/publicacoes'
 import { Route as AuthenticatedProjetosIndexRouteImport } from './routes/_authenticated/projetos.index'
 import { Route as AuthenticatedProjetosProjectIdRouteImport } from './routes/_authenticated/projetos.$projectId'
-import { Route as AuthenticatedUUsernameRouteImport } from './routes/_authenticated/u.$username'
-import { Route as AuthenticatedProjetosProjectIdPublicoRouteImport } from './routes/_authenticated/projetos.$projectId_.publico'
+import { Route as PublicUUsernameRouteImport } from './routes/_public/u.$username'
+import { Route as PublicProjetosProjectIdPublicoRouteImport } from './routes/_public/projetos.$projectId_.publico'
 import { Route as AuthenticatedProjetosProjectIdTarefasTaskIdRouteImport } from './routes/_authenticated/projetos.$projectId_.tarefas.$taskId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -31,6 +32,10 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PublicRoute = PublicRouteImport.update({
+  id: '/_public',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -48,26 +53,25 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedExplorarRoute = AuthenticatedExplorarRouteImport.update({
-  id: '/explorar',
-  path: '/explorar',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
 const AuthenticatedKanbanRoute = AuthenticatedKanbanRouteImport.update({
   id: '/kanban',
   path: '/kanban',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedPublicacoesRoute =
-  AuthenticatedPublicacoesRouteImport.update({
-    id: '/publicacoes',
-    path: '/publicacoes',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
 const AuthenticatedShowcaseRoute = AuthenticatedShowcaseRouteImport.update({
   id: '/showcase',
   path: '/showcase',
   getParentRoute: () => AuthenticatedRoute,
+} as any)
+const PublicExplorarRoute = PublicExplorarRouteImport.update({
+  id: '/explorar',
+  path: '/explorar',
+  getParentRoute: () => PublicRoute,
+} as any)
+const PublicPublicacoesRoute = PublicPublicacoesRouteImport.update({
+  id: '/publicacoes',
+  path: '/publicacoes',
+  getParentRoute: () => PublicRoute,
 } as any)
 const AuthenticatedProjetosIndexRoute =
   AuthenticatedProjetosIndexRouteImport.update({
@@ -81,16 +85,16 @@ const AuthenticatedProjetosProjectIdRoute =
     path: '/projetos/$projectId',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const AuthenticatedUUsernameRoute = AuthenticatedUUsernameRouteImport.update({
+const PublicUUsernameRoute = PublicUUsernameRouteImport.update({
   id: '/u/$username',
   path: '/u/$username',
-  getParentRoute: () => AuthenticatedRoute,
+  getParentRoute: () => PublicRoute,
 } as any)
-const AuthenticatedProjetosProjectIdPublicoRoute =
-  AuthenticatedProjetosProjectIdPublicoRouteImport.update({
+const PublicProjetosProjectIdPublicoRoute =
+  PublicProjetosProjectIdPublicoRouteImport.update({
     id: '/projetos/$projectId_/publico',
     path: '/projetos/$projectId/publico',
-    getParentRoute: () => AuthenticatedRoute,
+    getParentRoute: () => PublicRoute,
   } as any)
 const AuthenticatedProjetosProjectIdTarefasTaskIdRoute =
   AuthenticatedProjetosProjectIdTarefasTaskIdRouteImport.update({
@@ -104,14 +108,14 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/canvas': typeof AuthenticatedCanvasRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/explorar': typeof AuthenticatedExplorarRoute
   '/kanban': typeof AuthenticatedKanbanRoute
-  '/publicacoes': typeof AuthenticatedPublicacoesRoute
   '/showcase': typeof AuthenticatedShowcaseRoute
+  '/explorar': typeof PublicExplorarRoute
+  '/publicacoes': typeof PublicPublicacoesRoute
   '/projetos/$projectId': typeof AuthenticatedProjetosProjectIdRoute
-  '/u/$username': typeof AuthenticatedUUsernameRoute
+  '/u/$username': typeof PublicUUsernameRoute
   '/projetos/': typeof AuthenticatedProjetosIndexRoute
-  '/projetos/$projectId/publico': typeof AuthenticatedProjetosProjectIdPublicoRoute
+  '/projetos/$projectId/publico': typeof PublicProjetosProjectIdPublicoRoute
   '/projetos/$projectId/tarefas/$taskId': typeof AuthenticatedProjetosProjectIdTarefasTaskIdRoute
 }
 export interface FileRoutesByTo {
@@ -119,31 +123,32 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/canvas': typeof AuthenticatedCanvasRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/explorar': typeof AuthenticatedExplorarRoute
   '/kanban': typeof AuthenticatedKanbanRoute
-  '/publicacoes': typeof AuthenticatedPublicacoesRoute
   '/showcase': typeof AuthenticatedShowcaseRoute
+  '/explorar': typeof PublicExplorarRoute
+  '/publicacoes': typeof PublicPublicacoesRoute
   '/projetos/$projectId': typeof AuthenticatedProjetosProjectIdRoute
-  '/u/$username': typeof AuthenticatedUUsernameRoute
+  '/u/$username': typeof PublicUUsernameRoute
   '/projetos': typeof AuthenticatedProjetosIndexRoute
-  '/projetos/$projectId/publico': typeof AuthenticatedProjetosProjectIdPublicoRoute
+  '/projetos/$projectId/publico': typeof PublicProjetosProjectIdPublicoRoute
   '/projetos/$projectId/tarefas/$taskId': typeof AuthenticatedProjetosProjectIdTarefasTaskIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/_public': typeof PublicRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/canvas': typeof AuthenticatedCanvasRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
-  '/_authenticated/explorar': typeof AuthenticatedExplorarRoute
   '/_authenticated/kanban': typeof AuthenticatedKanbanRoute
-  '/_authenticated/publicacoes': typeof AuthenticatedPublicacoesRoute
   '/_authenticated/showcase': typeof AuthenticatedShowcaseRoute
+  '/_public/explorar': typeof PublicExplorarRoute
+  '/_public/publicacoes': typeof PublicPublicacoesRoute
   '/_authenticated/projetos/$projectId': typeof AuthenticatedProjetosProjectIdRoute
-  '/_authenticated/u/$username': typeof AuthenticatedUUsernameRoute
+  '/_public/u/$username': typeof PublicUUsernameRoute
   '/_authenticated/projetos/': typeof AuthenticatedProjetosIndexRoute
-  '/_authenticated/projetos/$projectId_/publico': typeof AuthenticatedProjetosProjectIdPublicoRoute
+  '/_public/projetos/$projectId_/publico': typeof PublicProjetosProjectIdPublicoRoute
   '/_authenticated/projetos/$projectId_/tarefas/$taskId': typeof AuthenticatedProjetosProjectIdTarefasTaskIdRoute
 }
 export interface FileRouteTypes {
@@ -153,10 +158,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/canvas'
     | '/dashboard'
-    | '/explorar'
     | '/kanban'
-    | '/publicacoes'
     | '/showcase'
+    | '/explorar'
+    | '/publicacoes'
     | '/projetos/$projectId'
     | '/u/$username'
     | '/projetos/'
@@ -168,10 +173,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/canvas'
     | '/dashboard'
-    | '/explorar'
     | '/kanban'
-    | '/publicacoes'
     | '/showcase'
+    | '/explorar'
+    | '/publicacoes'
     | '/projetos/$projectId'
     | '/u/$username'
     | '/projetos'
@@ -181,23 +186,25 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/_public'
     | '/login'
     | '/_authenticated/canvas'
     | '/_authenticated/dashboard'
-    | '/_authenticated/explorar'
     | '/_authenticated/kanban'
-    | '/_authenticated/publicacoes'
     | '/_authenticated/showcase'
+    | '/_public/explorar'
+    | '/_public/publicacoes'
     | '/_authenticated/projetos/$projectId'
-    | '/_authenticated/u/$username'
+    | '/_public/u/$username'
     | '/_authenticated/projetos/'
-    | '/_authenticated/projetos/$projectId_/publico'
+    | '/_public/projetos/$projectId_/publico'
     | '/_authenticated/projetos/$projectId_/tarefas/$taskId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  PublicRoute: typeof PublicRouteWithChildren
   LoginRoute: typeof LoginRoute
 }
 
@@ -215,6 +222,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_public': {
+      id: '/_public'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof PublicRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -238,25 +252,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/explorar': {
-      id: '/_authenticated/explorar'
-      path: '/explorar'
-      fullPath: '/explorar'
-      preLoaderRoute: typeof AuthenticatedExplorarRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     '/_authenticated/kanban': {
       id: '/_authenticated/kanban'
       path: '/kanban'
       fullPath: '/kanban'
       preLoaderRoute: typeof AuthenticatedKanbanRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/publicacoes': {
-      id: '/_authenticated/publicacoes'
-      path: '/publicacoes'
-      fullPath: '/publicacoes'
-      preLoaderRoute: typeof AuthenticatedPublicacoesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/showcase': {
@@ -265,6 +265,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/showcase'
       preLoaderRoute: typeof AuthenticatedShowcaseRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    '/_public/explorar': {
+      id: '/_public/explorar'
+      path: '/explorar'
+      fullPath: '/explorar'
+      preLoaderRoute: typeof PublicExplorarRouteImport
+      parentRoute: typeof PublicRoute
+    }
+    '/_public/publicacoes': {
+      id: '/_public/publicacoes'
+      path: '/publicacoes'
+      fullPath: '/publicacoes'
+      preLoaderRoute: typeof PublicPublicacoesRouteImport
+      parentRoute: typeof PublicRoute
     }
     '/_authenticated/projetos/': {
       id: '/_authenticated/projetos/'
@@ -280,19 +294,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjetosProjectIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/u/$username': {
-      id: '/_authenticated/u/$username'
+    '/_public/u/$username': {
+      id: '/_public/u/$username'
       path: '/u/$username'
       fullPath: '/u/$username'
-      preLoaderRoute: typeof AuthenticatedUUsernameRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      preLoaderRoute: typeof PublicUUsernameRouteImport
+      parentRoute: typeof PublicRoute
     }
-    '/_authenticated/projetos/$projectId_/publico': {
-      id: '/_authenticated/projetos/$projectId_/publico'
+    '/_public/projetos/$projectId_/publico': {
+      id: '/_public/projetos/$projectId_/publico'
       path: '/projetos/$projectId/publico'
       fullPath: '/projetos/$projectId/publico'
-      preLoaderRoute: typeof AuthenticatedProjetosProjectIdPublicoRouteImport
-      parentRoute: typeof AuthenticatedRoute
+      preLoaderRoute: typeof PublicProjetosProjectIdPublicoRouteImport
+      parentRoute: typeof PublicRoute
     }
     '/_authenticated/projetos/$projectId_/tarefas/$taskId': {
       id: '/_authenticated/projetos/$projectId_/tarefas/$taskId'
@@ -307,29 +321,20 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteChildren {
   AuthenticatedCanvasRoute: typeof AuthenticatedCanvasRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
-  AuthenticatedExplorarRoute: typeof AuthenticatedExplorarRoute
   AuthenticatedKanbanRoute: typeof AuthenticatedKanbanRoute
-  AuthenticatedPublicacoesRoute: typeof AuthenticatedPublicacoesRoute
   AuthenticatedShowcaseRoute: typeof AuthenticatedShowcaseRoute
   AuthenticatedProjetosProjectIdRoute: typeof AuthenticatedProjetosProjectIdRoute
-  AuthenticatedUUsernameRoute: typeof AuthenticatedUUsernameRoute
   AuthenticatedProjetosIndexRoute: typeof AuthenticatedProjetosIndexRoute
-  AuthenticatedProjetosProjectIdPublicoRoute: typeof AuthenticatedProjetosProjectIdPublicoRoute
   AuthenticatedProjetosProjectIdTarefasTaskIdRoute: typeof AuthenticatedProjetosProjectIdTarefasTaskIdRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCanvasRoute: AuthenticatedCanvasRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
-  AuthenticatedExplorarRoute: AuthenticatedExplorarRoute,
   AuthenticatedKanbanRoute: AuthenticatedKanbanRoute,
-  AuthenticatedPublicacoesRoute: AuthenticatedPublicacoesRoute,
   AuthenticatedShowcaseRoute: AuthenticatedShowcaseRoute,
   AuthenticatedProjetosProjectIdRoute: AuthenticatedProjetosProjectIdRoute,
-  AuthenticatedUUsernameRoute: AuthenticatedUUsernameRoute,
   AuthenticatedProjetosIndexRoute: AuthenticatedProjetosIndexRoute,
-  AuthenticatedProjetosProjectIdPublicoRoute:
-    AuthenticatedProjetosProjectIdPublicoRoute,
   AuthenticatedProjetosProjectIdTarefasTaskIdRoute:
     AuthenticatedProjetosProjectIdTarefasTaskIdRoute,
 }
@@ -338,9 +343,27 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
   AuthenticatedRouteChildren,
 )
 
+interface PublicRouteChildren {
+  PublicExplorarRoute: typeof PublicExplorarRoute
+  PublicPublicacoesRoute: typeof PublicPublicacoesRoute
+  PublicUUsernameRoute: typeof PublicUUsernameRoute
+  PublicProjetosProjectIdPublicoRoute: typeof PublicProjetosProjectIdPublicoRoute
+}
+
+const PublicRouteChildren: PublicRouteChildren = {
+  PublicExplorarRoute: PublicExplorarRoute,
+  PublicPublicacoesRoute: PublicPublicacoesRoute,
+  PublicUUsernameRoute: PublicUUsernameRoute,
+  PublicProjetosProjectIdPublicoRoute: PublicProjetosProjectIdPublicoRoute,
+}
+
+const PublicRouteWithChildren =
+  PublicRoute._addFileChildren(PublicRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  PublicRoute: PublicRouteWithChildren,
   LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport

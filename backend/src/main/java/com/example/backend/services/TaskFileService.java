@@ -7,17 +7,13 @@ import com.example.backend.models.User;
 import com.example.backend.repositories.TaskFileRepository;
 import com.example.backend.repositories.TaskRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -58,19 +54,19 @@ public class TaskFileService {
     private final TaskRepository taskRepository;
     private final TaskFileRepository fileRepository;
     private final PostService postService;
-    private final Path storageDir;
+    private final FileStorage storage;
     private final long maxBytes;
 
     public TaskFileService(ProjectAccessService access, TaskRepository taskRepository,
                            TaskFileRepository fileRepository,
                            PostService postService,
-                           @Value("${app.storage.dir:uploads}") String storageDir,
+                           FileStorage storage,
                            @Value("${app.storage.max-file-size-mb:500}") long maxFileSizeMb) {
         this.access = access;
         this.taskRepository = taskRepository;
         this.fileRepository = fileRepository;
         this.postService = postService;
-        this.storageDir = Path.of(storageDir).toAbsolutePath().normalize();
+        this.storage = storage;
         this.maxBytes = maxFileSizeMb * 1024 * 1024;
     }
 
@@ -110,11 +106,10 @@ public class TaskFileService {
         }
 
         String storedName = UUID.randomUUID() + "." + extension;
-        try (InputStream input = file.getInputStream()) {
-            Files.createDirectories(storageDir);
-            Files.copy(input, resolveStored(storedName), StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException exception) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Não foi possível salvar o arquivo.");
+        try {
+            storage.store(storedName, file.getInputStream());
+        } catch (java.io.IOException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Não foi possível ler o arquivo enviado.");
         }
 
         if (markAsFinal) {
@@ -134,15 +129,14 @@ public class TaskFileService {
         return saved;
     }
 
-    /** Arquivo e caminho no disco, para download. Só para quem pode ver a tarefa. */
+    /** Arquivo e conteúdo, para download. Só para quem pode ver a tarefa. */
     @Transactional(readOnly = true)
     public StoredFile load(Long fileId, User user) {
         TaskFile file = findVisibleFile(fileId, user);
-        Path path = resolveStored(file.getStoredName());
-        if (!Files.exists(path)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "O conteúdo do arquivo não está mais no servidor.");
-        }
-        return new StoredFile(file, path);
+        Resource content = storage.load(file.getStoredName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "O conteúdo do arquivo não está mais no servidor."));
+        return new StoredFile(file, content);
     }
 
     @Transactional
@@ -194,11 +188,6 @@ public class TaskFileService {
         fileRepository.deleteAll(files);
     }
 
-    /** Caminho no disco de um arquivo já autorizado por quem chama (ex.: imagem de uma publicação). */
-    public Path pathOf(TaskFile file) {
-        return resolveStored(file.getStoredName());
-    }
-
     private void clearFinal(Task task) {
         for (TaskFile other : fileRepository.findByTaskOrderByVersionDesc(task)) {
             if (other.isFinalImage()) {
@@ -220,20 +209,9 @@ public class TaskFileService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Arquivo não encontrado."));
     }
 
-    private Path resolveStored(String storedName) {
-        Path path = storageDir.resolve(storedName).normalize();
-        if (!path.startsWith(storageDir)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nome de arquivo inválido.");
-        }
-        return path;
-    }
-
     private void removeFromDisk(TaskFile file) {
-        try {
-            Files.deleteIfExists(resolveStored(file.getStoredName()));
-        } catch (IOException ignored) {
-            // O registro sai do banco mesmo assim; um arquivo órfão no disco não expõe nada.
-        }
+        // O registro sai do banco mesmo se o arquivo já não existir; um arquivo órfão não expõe nada.
+        storage.delete(file.getStoredName());
     }
 
     static String cleanFileName(String name) {
@@ -250,6 +228,6 @@ public class TaskFileService {
         return dot < 0 ? "" : fileName.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 
-    public record StoredFile(TaskFile file, Path path) {
+    public record StoredFile(TaskFile file, Resource content) {
     }
 }

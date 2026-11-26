@@ -24,11 +24,15 @@ export const Route = createFileRoute("/login")({
       },
     ],
   }),
+  // ?modo=cadastro abre direto na aba "Criar Cadastro" (botão "Criar conta" das páginas públicas).
+  validateSearch: (search: Record<string, unknown>): { modo?: "cadastro" } =>
+    search["modo"] === "cadastro" ? { modo: "cadastro" } : {},
   component: LoginPage,
 });
 
 function LoginPage() {
-  const [mode, setMode] = useState("entrar");
+  const { modo } = Route.useSearch();
+  const [mode, setMode] = useState<string>(modo ?? "entrar");
   const [profile, setProfile] = useState<"artista" | "empresa">("artista");
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");

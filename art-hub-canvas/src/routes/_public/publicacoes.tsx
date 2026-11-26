@@ -7,8 +7,9 @@ import { PostCard, UserAvatar } from "@/components/posts/PostCard";
 import { PostComposer } from "@/components/posts/PostComposer";
 import { Button } from "@/components/ui/button";
 import { api, type Post } from "@/lib/api";
+import { useAuth } from "@/lib/AuthContext";
 
-export const Route = createFileRoute("/_authenticated/publicacoes")({
+export const Route = createFileRoute("/_public/publicacoes")({
   head: () => ({ meta: [{ title: "Publicações — WorkAt" }] }),
   component: FeedPage,
 });
@@ -29,6 +30,7 @@ function FeedPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
   const knownIds = useRef<Set<number>>(new Set());
   const topRef = useRef<HTMLDivElement>(null);
 
@@ -142,13 +144,21 @@ function FeedPage() {
               >
                 <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
               </Button>
-              <Button
-                size="sm"
-                className="gradient-primary text-primary-foreground"
-                onClick={() => setComposerOpen(true)}
-              >
-                <Plus className="mr-1 size-4" /> Publicar
-              </Button>
+              {isAuthenticated ? (
+                <Button
+                  size="sm"
+                  className="gradient-primary text-primary-foreground"
+                  onClick={() => setComposerOpen(true)}
+                >
+                  <Plus className="mr-1 size-4" /> Publicar
+                </Button>
+              ) : (
+                <Button asChild size="sm" className="gradient-primary text-primary-foreground">
+                  <Link to="/login">
+                    Entrar para publicar
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
 
@@ -248,7 +258,9 @@ function FeedPage() {
           </section>
         </aside>
       </div>
-      <PostComposer open={composerOpen} onOpenChange={setComposerOpen} onCreated={added} />
+      {isAuthenticated && (
+        <PostComposer open={composerOpen} onOpenChange={setComposerOpen} onCreated={added} />
+      )}
     </AppLayout>
   );
 }

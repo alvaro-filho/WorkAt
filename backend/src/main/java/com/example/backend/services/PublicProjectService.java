@@ -10,13 +10,12 @@ import com.example.backend.models.User;
 import com.example.backend.repositories.ProjectMemberRepository;
 import com.example.backend.repositories.ProjectRepository;
 import com.example.backend.repositories.TaskFileRepository;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -92,11 +91,10 @@ public class PublicProjectService {
                 .filter(candidate -> candidate.getTask().getProject().getId().equals(project.getId()))
                 .filter(candidate -> showsInPublicView(candidate, viewerOrNull, isPublic))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem não encontrada."));
-        Path path = storage.resolve(file.getStoredName());
-        if (!Files.exists(path)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "O conteúdo da imagem não está mais no servidor.");
-        }
-        return new PostService.ImageContent(path, file.getContentType(), file.getSizeBytes(), isPublic);
+        Resource content = storage.load(file.getStoredName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "O conteúdo da imagem não está mais no servidor."));
+        return new PostService.ImageContent(content, file.getContentType(), file.getSizeBytes(), isPublic);
     }
 
     private Project findViewable(Long projectId, User viewer) {

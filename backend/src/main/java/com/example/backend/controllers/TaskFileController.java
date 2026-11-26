@@ -4,7 +4,6 @@ import com.example.backend.dto.TaskFileResponse;
 import com.example.backend.models.User;
 import com.example.backend.repositories.UserRepository;
 import com.example.backend.services.TaskFileService;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -67,7 +66,7 @@ public class TaskFileController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .header("X-Content-Type-Options", "nosniff")
                 .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
-                .body(new FileSystemResource(stored.path()));
+                .body(stored.content());
     }
 
     @PostMapping("/api/v1/files/{fileId}/final")

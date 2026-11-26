@@ -14,6 +14,7 @@ import com.example.backend.repositories.PostImageRepository;
 import com.example.backend.repositories.PostRepository;
 import com.example.backend.repositories.TaskFileRepository;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,8 +22,6 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -150,11 +149,10 @@ public class PostService {
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem não encontrada."));
         TaskFile file = image.getTaskFile();
-        Path path = storage.resolve(file != null ? file.getStoredName() : image.getStoredName());
-        if (!Files.exists(path)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "O conteúdo da imagem não está mais no servidor.");
-        }
-        return new ImageContent(path, file != null ? file.getContentType() : image.getContentType(),
+        Resource content = storage.load(file != null ? file.getStoredName() : image.getStoredName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "O conteúdo da imagem não está mais no servidor."));
+        return new ImageContent(content, file != null ? file.getContentType() : image.getContentType(),
                 file != null ? file.getSizeBytes() : image.getSizeBytes(), isPublic(post));
     }
 
@@ -417,6 +415,6 @@ public class PostService {
         return clean;
     }
 
-    public record ImageContent(Path path, String contentType, long sizeBytes, boolean isPublic) {
+    public record ImageContent(Resource content, String contentType, long sizeBytes, boolean isPublic) {
     }
 }

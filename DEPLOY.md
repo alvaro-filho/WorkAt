@@ -59,12 +59,12 @@ Gere um segredo aleatório no PowerShell e guarde (não coloque no GitHub):
    | `ARTHUB_DEV_JWT_SECRET` | o segredo do passo 2 |
 
 4. Clique em **Apply** e espere o primeiro deploy (o build do Docker leva alguns minutos).
-5. Teste no navegador: `https://<nome-do-serviço>.onrender.com/api/v1/showcase/public`.
-   A resposta esperada é `[]` (lista vazia) ou a lista de artes.
+5. Teste no navegador: `https://<nome-do-serviço>.onrender.com/api/v1/health`.
+   A resposta esperada é `{"status":"ok"}`.
 
 Sem o Blueprint (criando na mão): **New → Web Service**, repositório, **Root Directory** `backend`,
 **Language** Docker, **Instance Type** Free, as mesmas variáveis e **Health Check Path**
-`/api/v1/showcase/public`.
+`/api/v1/health`. Em um serviço já criado, troque em **Settings → Health Check Path**.
 
 ## 4. Frontend no Vercel
 
@@ -82,12 +82,65 @@ Teste: abra o site, crie uma conta e um projeto.
 
 ## 5. Limites do plano grátis (importante para a apresentação)
 
-- **O backend dorme** depois de ~15 min sem acesso. O primeiro acesso leva de 30 s a 1 min. No dia, abra o site
-  uns 5 minutos antes e faça login para acordar o servidor.
-- **Arquivos enviados são temporários**: o disco do Render grátis é apagado a cada deploy ou reinício. Projetos,
-  tarefas e textos ficam no banco; imagens e entregas precisam ser enviadas de novo depois de um reinício.
-  (Solução definitiva, para depois: guardar os arquivos num storage como Cloudflare R2 ou Supabase Storage.)
+- **O backend dorme** depois de ~15 min sem acesso, e o primeiro acesso leva de 30 s a 1 min. O site mostra
+  "Acordando o servidor…" enquanto isso. Para ele não dormir, veja o passo 7.
+- **Arquivos enviados**: sem o passo 6, ficam no disco do Render grátis, que é apagado a cada deploy ou
+  reinício (imagens e entregas somem; projetos, tarefas e textos ficam no banco). Com o passo 6, ficam num
+  bucket e sobrevivem a tudo.
 - **Memória**: o plano tem 512 MB; o `Dockerfile` já limita a JVM para caber.
+
+## 6. Arquivos permanentes (bucket compatível com S3)
+
+O backend guarda os arquivos num bucket quando `ARTHUB_STORAGE_TYPE=s3`. Funciona com qualquer serviço
+compatível com S3. Dois com plano grátis (confira os limites e se pedem cartão nas páginas de preço):
+
+**Cloudflare R2**
+
+1. No painel da Cloudflare: **R2 Object Storage → Create bucket**, nome `workat` (localização automática).
+2. **R2 → Manage API tokens → Create API token**, permissão **Object Read & Write** só para o bucket `workat`.
+   Anote o **Access Key ID**, o **Secret Access Key** e o endpoint
+   `https://<ID-da-conta>.r2.cloudflarestorage.com`.
+3. Variáveis no Render (**Environment**):
+
+   | Variável | Valor |
+   | --- | --- |
+   | `ARTHUB_STORAGE_TYPE` | `s3` |
+   | `ARTHUB_S3_ENDPOINT` | `https://<ID-da-conta>.r2.cloudflarestorage.com` |
+   | `ARTHUB_S3_REGION` | `auto` |
+   | `ARTHUB_S3_BUCKET` | `workat` |
+   | `ARTHUB_S3_ACCESS_KEY` | o Access Key ID |
+   | `ARTHUB_S3_SECRET_KEY` | o Secret Access Key |
+
+**Supabase Storage**
+
+1. No projeto do Supabase: **Storage → New bucket**, nome `workat`, **privado**.
+2. **Storage → Settings → S3 Connection**: ative, anote o **Endpoint** e a **Region**, e crie uma
+   **Access key** (anote o Access Key ID e o Secret).
+3. Mesmas variáveis da tabela acima, com o endpoint e a região do Supabase.
+
+Opcionais: `ARTHUB_S3_PREFIX` (pasta dentro do bucket, ex.: `uploads`) e `ARTHUB_S3_PATH_STYLE`
+(`true` por padrão, que serve para R2, Supabase e MinIO).
+
+Depois de salvar, o Render reinicia o serviço. No log deve aparecer
+`Arquivos enviados ficam em: bucket S3 "workat"`. Se faltar alguma variável, o backend **não sobe** e o log
+diz qual (melhor do que perder arquivos sem perceber). O bucket fica privado: as imagens públicas continuam
+passando pelo backend, que confere quem pode ver cada uma.
+
+Arquivos enviados antes de ligar o bucket não são copiados (no Render eles já se perdem a cada reinício);
+envie de novo os que importam.
+
+## 7. Manter o backend acordado
+
+O workflow `.github/workflows/manter-acordado.yml` chama `/api/v1/health` a cada 10 minutos, e o Render grátis
+não chega a dormir. Ele roda sozinho depois do merge no `master` (aba **Actions** do GitHub; dá para rodar na
+mão em **Run workflow**).
+
+- Por padrão chama `https://work-at-chi.vercel.app/api/v1/health`. Para outro endereço, crie a variável
+  `WORKAT_HEALTH_URL` em **Settings → Secrets and variables → Actions → Variables**.
+- `/api/v1/health` não usa o banco: o Neon continua dormindo quando ninguém usa (economiza as horas grátis).
+- Ligado o mês todo, o serviço gasta ~720 das 750 horas grátis mensais do Render. Se houver outros serviços
+  grátis na mesma conta, as horas são somadas.
+- Se o repositório ficar 60 dias sem commits, o GitHub pausa o agendamento; reative na aba **Actions**.
 
 ## Plano B: backend no seu PC com túnel
 

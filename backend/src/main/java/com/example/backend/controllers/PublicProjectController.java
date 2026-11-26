@@ -5,10 +5,8 @@ import com.example.backend.models.User;
 import com.example.backend.repositories.UserRepository;
 import com.example.backend.services.PostService;
 import com.example.backend.services.PublicProjectService;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -16,7 +14,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 /** Visão pública do projeto. A tela exige login (decisão 4); as imagens de projeto público não. */
 @RestController
@@ -34,11 +31,8 @@ public class PublicProjectController {
     public PublicProjectResponse view(@PathVariable Long projectId,
                                       @RequestParam(required = false, defaultValue = "asc") String order,
                                       Authentication authentication) {
-        User user = optionalUser(authentication);
-        if (user == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário autenticado não identificado.");
-        }
-        return publicProjectService.view(projectId, user, order);
+        // Público para projetos abertos; privados continuam só para quem participa (o serviço confere).
+        return publicProjectService.view(projectId, optionalUser(authentication), order);
     }
 
     @GetMapping("/api/v1/projects/{projectId}/public/files/{fileId}")
@@ -50,7 +44,7 @@ public class PublicProjectController {
                 .contentLength(image.sizeBytes())
                 .header("X-Content-Type-Options", "nosniff")
                 .header(HttpHeaders.CACHE_CONTROL, image.isPublic() ? "public, max-age=300" : "private, no-store")
-                .body(new FileSystemResource(image.path()));
+                .body(image.content());
     }
 
     private User optionalUser(Authentication authentication) {

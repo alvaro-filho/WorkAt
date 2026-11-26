@@ -18,6 +18,9 @@
         <java.version>17</java.version>
         <!-- Versão do JWT/JJWT que será usada -->
         <jjwt.version>0.11.5</jjwt.version>
+        <!-- SDK da AWS para S3 (Cloudflare R2, Supabase Storage, Backblaze B2 e AWS usam a mesma API).
+             Fica abaixo da 2.30: a partir dela o SDK manda checksums que serviços compatíveis recusam. -->
+        <aws.sdk.version>2.25.60</aws.sdk.version>
     </properties>
 
     <dependencies>
@@ -76,6 +79,27 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
+        </dependency>
+        <!-- Armazenamento de arquivos em serviço compatível com S3 (app.storage.type=s3). -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>${aws.sdk.version}</version>
         </dependency>
     </dependencies>
 

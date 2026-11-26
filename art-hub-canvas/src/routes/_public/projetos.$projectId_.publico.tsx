@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { api, ApiError, type PublicProject } from "@/lib/api";
 import { projectTypeInfo } from "@/lib/project-labels";
 
-export const Route = createFileRoute("/_authenticated/projetos/$projectId_/publico")({
+export const Route = createFileRoute("/_public/projetos/$projectId_/publico")({
   head: () => ({ meta: [{ title: "Projeto — WorkAt" }] }),
   component: PublicProjectPage,
 });

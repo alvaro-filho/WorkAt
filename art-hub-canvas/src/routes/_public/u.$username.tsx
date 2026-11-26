@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError, type Post, type Profile, type ProfileProject } from "@/lib/api";
 import { projectTypeInfo, roleLabel } from "@/lib/project-labels";
 
-export const Route = createFileRoute("/_authenticated/u/$username")({
+export const Route = createFileRoute("/_public/u/$username")({
   head: () => ({ meta: [{ title: "Perfil — WorkAt" }] }),
   component: ProfilePage,
 });

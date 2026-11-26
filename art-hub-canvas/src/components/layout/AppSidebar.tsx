@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { FolderKanban, LogOut, Newspaper, Palette, UserRound } from "lucide-react";
+import { FolderKanban, LogIn, LogOut, Newspaper, Palette, UserPlus, UserRound } from "lucide-react";
 
 import {
   Sidebar,
@@ -15,6 +15,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/AuthContext";
 
 // O Kanban e o Canvas vivem dentro de cada projeto/tarefa, não na navegação global.
@@ -27,11 +28,14 @@ export function AppSidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   // Estilo GitHub: o perfil é a página inicial; o Kanban e o Canvas vivem dentro dos projetos.
   const profileUrl = user ? `/u/${user.username}` : "/dashboard";
-  const items = [
-    { title: "Meu perfil", url: profileUrl, icon: UserRound },
-    { title: "Projetos", url: "/projetos", icon: FolderKanban },
-    { title: "Publicações", url: "/publicacoes", icon: Newspaper },
-  ];
+  // Sem login (perfil ou feed aberto por link): só o que é público.
+  const items = user
+    ? [
+        { title: "Meu perfil", url: profileUrl, icon: UserRound },
+        { title: "Projetos", url: "/projetos", icon: FolderKanban },
+        { title: "Publicações", url: "/publicacoes", icon: Newspaper },
+      ]
+    : [{ title: "Publicações", url: "/publicacoes", icon: Newspaper }];
 
   const handleLogout = () => {
     logout();
@@ -79,6 +83,33 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="gap-2 p-3">
+        {!user ? (
+          collapsed ? (
+            <Link
+              to="/login"
+              aria-label="Entrar"
+              className="flex justify-center rounded-xl p-2 text-muted-foreground hover:text-foreground"
+            >
+              <LogIn className="size-4" />
+            </Link>
+          ) : (
+            <div className="glass space-y-2 rounded-xl p-3">
+              <p className="text-xs text-muted-foreground">
+                Crie sua conta para montar seu portfólio e trabalhar em projetos.
+              </p>
+              <Button asChild size="sm" className="gradient-primary w-full text-primary-foreground">
+                <Link to="/login">
+                  <LogIn className="mr-1 size-4" /> Entrar
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline" className="w-full">
+                <Link to="/login" search={{ modo: "cadastro" }}>
+                  <UserPlus className="mr-1 size-4" /> Criar conta
+                </Link>
+              </Button>
+            </div>
+          )
+        ) : (
         <div className="glass flex items-center gap-3 rounded-xl p-2">
           <Avatar className="size-8">
             <AvatarFallback className="bg-primary/20 text-xs text-foreground">
@@ -111,6 +142,7 @@ export function AppSidebar() {
             </button>
           )}
         </div>
+        )}
       </SidebarFooter>
     </Sidebar>
   );

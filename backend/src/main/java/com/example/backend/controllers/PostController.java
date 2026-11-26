@@ -5,7 +5,6 @@ import com.example.backend.dto.PostUpdateRequest;
 import com.example.backend.models.User;
 import com.example.backend.repositories.UserRepository;
 import com.example.backend.services.PostService;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -90,7 +89,7 @@ public class PostController {
                 .contentLength(image.sizeBytes())
                 .header("X-Content-Type-Options", "nosniff")
                 .header(HttpHeaders.CACHE_CONTROL, image.isPublic() ? "public, max-age=300" : "private, no-store")
-                .body(new FileSystemResource(image.path()));
+                .body(image.content());
     }
 
     private User optionalUser(Authentication authentication) {

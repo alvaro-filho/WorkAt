@@ -333,94 +333,91 @@ check("canvas com JSON inválido é recusado", s, 400)
 s, _, _ = call("PUT", f"/tasks/{tc1['id']}/canvas", tf, {"content": '[{"id":"a","type":"note","x":0,"y":0,"text":"ok"}]'})
 check("fabio edita canvas no cooperativo", s, 200)
 
-# ------------------------------------------------------------------ 7. Vitrine / Explorar
-sec("7. Vitrine, NDA e Explorar")
-s, _, _ = call("POST", f"/tasks/{t_duda['id']}/showcase", td, {})
-check("sem imagem final não envia para a vitrine", s, 400)
-s, art_bia, _ = call("POST", f"/tasks/{t_bia['id']}/showcase", tb, {"title": "Heroína Aurora", "description": "Versão final"})
-check("bia envia (projeto com NDA) = travada", (s, (art_bia or {}).get("ndaStatus")), (201, "LOCKED_BY_NDA"))
-s, pub, _ = call("GET", "/showcase/public")
-check("arte travada NÃO aparece no Explorar", any(x["id"] == art_bia["id"] for x in pub), False)
-s, _, _ = call("GET", f"/showcase/{art_bia['id']}/image")
-check("imagem travada sem login = 404", s, 404)
-s, _, _ = call("GET", f"/showcase/{art_bia['id']}/image", ta)
-check("contratante vê imagem travada", s, 200)
-s, inbox, _ = call("GET", "/showcase/inbox", ta)
-check("arte aparece na caixa da empresa", any(x["id"] == art_bia["id"] for x in inbox) if s == 200 else s, True)
-s, mine, _ = call("GET", "/showcase/mine", tb)
-check("arte aparece em 'minhas' da bia", any(x["id"] == art_bia["id"] for x in mine) if s == 200 else s, True)
-s, _, _ = call("PATCH", f"/showcase/{art_bia['id']}/nda-status", tb, {"status": "APPROVED_FOR_RELEASE"})
-check("artista não libera a própria arte", s, 404)
-s, _, _ = call("PATCH", f"/showcase/{art_bia['id']}/nda-status", ta, {"status": "LOCKED_BY_NDA"})
-check("recusar sem justificativa é recusado", s, 400)
-s, r, _ = call("PATCH", f"/showcase/{art_bia['id']}/nda-status", ta, {"status": "LOCKED_BY_NDA", "note": "Esperar o trailer"})
-check("empresa recusa com motivo", (s, (r or {}).get("reviewNote")), (200, "Esperar o trailer"))
-s, _, _ = call("PATCH", f"/showcase/{art_bia['id']}/nda-status", ta,
-               {"status": "APPROVED_FOR_RELEASE", "releaseDate": (date.today() - timedelta(days=1)).isoformat()})
-check("data de liberação no passado é recusada", s, 400)
-s, r, _ = call("PATCH", f"/showcase/{art_bia['id']}/nda-status", ta,
-               {"status": "APPROVED_FOR_RELEASE", "releaseDate": amanha})
-check("empresa libera com data futura", (s, (r or {}).get("ndaStatus")), (200, "APPROVED_FOR_RELEASE"))
-s, pub, _ = call("GET", "/showcase/public")
-check("com data futura ainda não aparece no Explorar", any(x["id"] == art_bia["id"] for x in pub), False)
-s, r, _ = call("PATCH", f"/showcase/{art_bia['id']}/nda-status", ta, {"status": "APPROVED_FOR_RELEASE"})
-check("empresa libera agora", s, 200)
-s, pub, _ = call("GET", "/showcase/public")
-check("agora aparece no Explorar", any(x["id"] == art_bia["id"] for x in pub), True)
-s, img, h = call("GET", f"/showcase/{art_bia['id']}/image")
-check("imagem liberada é pública", (s, img[:4] if isinstance(img, bytes) else None), (200, b"\x89PNG"))
+# ------------------------------------------------------------------ 7. Publicações e Explorar (V3)
+sec("7. Publicações, NDA e Explorar")
 
-s, art_caio, _ = call("POST", f"/tasks/{t_caio['id']}/showcase", tc, {"title": "Floresta"})
-check("caio envia (corporativo sem NDA) = travada?", (s, (art_caio or {}).get("ndaStatus")), (201, "LOCKED_BY_NDA"),
-      "(Jogo Aurora tem NDA)")
-s, art_coop, _ = call("POST", f"/tasks/{tc2['id']}/showcase", tf, {"title": "Capa do Quadrinho"})
-check("fabio envia (cooperativo) = publicada direto", (s, (art_coop or {}).get("ndaStatus")), (201, "APPROVED_FOR_RELEASE"))
-s, art_pess, _ = call("POST", f"/tasks/{tp['id']}/showcase", tf, {"title": "Estudo de mãos"})
-check("fabio envia (pessoal) = publicada direto", (s, (art_pess or {}).get("ndaStatus")), (201, "APPROVED_FOR_RELEASE"))
-s, _, _ = call("POST", f"/tasks/{tp['id']}/showcase", tf, {"title": "Estudo de mãos"})
-check("reenviar a mesma imagem publicada", s, 409)
-s, pub, _ = call("GET", "/showcase/public")
-ids = [x["id"] for x in pub]
-check("Explorar tem as 3 liberadas", all(i in ids for i in (art_bia["id"], art_coop["id"], art_pess["id"])), True)
-check("Explorar ordena da mais recente", ids.index(art_pess["id"]) < ids.index(art_bia["id"]), True)
-coop_pub = next((x for x in pub if x["id"] == art_coop["id"]), {})
-check("arte do cooperativo: 'para' quem?", coop_pub.get("companyUsername"), "eva",
-      "(dono do coop aparece como contratante)")
-pess_pub = next((x for x in pub if x["id"] == art_pess["id"]), {})
-check("arte do pessoal tem nome do projeto", pess_pub.get("projectName"), "Estudos do Fabio")
-s, _, _ = call("DELETE", f"/files/{fe['id']}", tf)
-check("não apaga imagem que está na vitrine", s, 409)
-s, lst, _ = call("GET", f"/projects/{corp['id']}/showcase", ta)
-check("aba vitrine do projeto (dono vê todas)", len(lst) if s == 200 else s, 2)
-s, lst, _ = call("GET", f"/projects/{corp['id']}/showcase", tb)
-check("aba vitrine do projeto (bia vê só a dela)", [x["id"] for x in lst] if s == 200 else s, [art_bia["id"]])
-s, _, _ = call("GET", f"/tasks/{t_bia['id']}/showcase", tb)
-check("status da vitrine na tarefa", s, 200)
+
+def new_post(token, name, content, title=None, subtitle=None):
+    bnd = uuid.uuid4().hex
+    body = b""
+    for k, v in (("title", title), ("subtitle", subtitle)):
+        if v:
+            body += f"--{bnd}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode()
+    body += (f"--{bnd}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\n"
+             f"Content-Type: application/octet-stream\r\n\r\n").encode() + content + f"\r\n--{bnd}--\r\n".encode()
+    return call("POST", "/posts", token, raw=body, ctype=f"multipart/form-data; boundary={bnd}")
+
+
+def feed():
+    s, f, _ = call("GET", "/feed?limit=50")
+    return f if s == 200 else []
+
+
+def api_path(url):
+    return url.replace("/api/v1", "", 1)
+
+
+s, _, _ = call("POST", f"/files/{f3['id']}/post", tb, {"subtitle": "Versão final"})
+check("projeto com NDA: bia não publica a arte", s, 409)
+s, pr, _ = call("PATCH", f"/projects/{corp['id']}/settings", ta, {"ndaReleaseDate": date.today().isoformat()})
+check("empresa define liberação do NDA para hoje", s, 200)
+s, post_bia, _ = call("POST", f"/files/{f3['id']}/post", tb, {"subtitle": "Versão final"})
+check("liberado: bia publica a arte como post", (s, (post_bia or {}).get("isPublic")), (201, True))
+check("post da bia aparece no Explorar", any(x["id"] == post_bia["id"] for x in feed()), True)
+s, img, _ = call("GET", api_path(post_bia["images"][0]["url"]))
+check("imagem do post é pública (sem login)", (s, img[1:4] if isinstance(img, bytes) else None), (200, b"PNG"))
+s, _, _ = call("GET", f"/files/{f3['id']}/content")
+check("mas o arquivo da tarefa continua privado", s in (401, 403), True)
+
+s, pr, _ = call("PATCH", f"/projects/{coop['id']}/settings", te, {"autoWip": True})
+check("eva liga o WIP automático no cooperativo", (s, (pr or {}).get("publiclyVisible")), (200, True))
+anuncio = [x for x in feed() if x["kind"] == "PROJECT_PUBLISHED" and (x.get("project") or {}).get("id") == coop["id"]]
+check("aviso de projeto público no Explorar", len(anuncio), 1)
+s, fw, _ = upload(tf, tc2["id"], "capa_v2.png", png(40, 140, 230))
+wips = [x for x in feed() if x["kind"] == "WIP" and (x.get("task") or {}).get("id") == tc2["id"]]
+check("novo envio do fabio vira WIP no Explorar", (s, len(wips)), (201, 1))
+s, pv, _ = call("GET", f"/projects/{coop['id']}/public")
+check("visão pública do cooperativo sem login", s, 200)
+
+s, post_pess, _ = call("POST", f"/files/{fp['id']}/post", tf, {"subtitle": "Estudo"})
+check("fabio publica imagem do projeto pessoal", (s, (post_pess or {}).get("kind")), (201, "STANDALONE"))
+s, loose, _ = new_post(tc, "esboco_livre.png", png(250, 200, 30), "Esboço livre", "Fora de projeto")
+check("caio cria post avulso", (s, (loose or {}).get("kind")), (201, "STANDALONE"))
+s, _, _ = new_post(tc, "contrato.pdf", b"%PDF-1.4", "PDF")
+check("post avulso recusa o que não é imagem", s, 415)
+s, _, _ = call("DELETE", f"/posts/{loose['id']}", tb)
+check("outra pessoa não apaga o post", s, 403)
+ids = [x["id"] for x in feed()]
+check("Explorar tem os posts novos", all(i in ids for i in (post_bia["id"], post_pess["id"], loose["id"])), True)
+check("Explorar ordena do mais recente", ids.index(loose["id"]) < ids.index(post_bia["id"]), True)
 
 # ------------------------------------------------------------------ 8. Perfil
 sec("8. Perfil público")
 s, pf, _ = call("GET", "/users/bia/profile", te)
 check("eva abre o perfil da bia", s, 200)
-masked = [p for p in pf.get("projects", []) if p["masked"]]
-check("projeto com NDA aparece mascarado para eva", (len(masked), masked[0]["name"] if masked else "-"), (1, None))
-check("portfólio da bia mostra a heroína", [x["id"] for x in pf.get("portfolio", [])], [art_bia["id"]])
-s, pf, _ = call("GET", "/users/bia/profile", tc)
-check("caio (colega) vê o nome do projeto NDA", [p["name"] for p in pf["projects"]
-      if p["type"] == "CORPORATE" and p["nda"]], ["Jogo Aurora"])
+check("portfólio da bia mostra o post", [x["id"] for x in pf.get("portfolio", [])], [post_bia["id"]])
 s, pf, _ = call("GET", "/users/fabio/profile", tb)
 check("pessoal do fabio fica escondido para bia", (pf["hiddenPersonalProjects"],
       [p["name"] for p in pf["projects"]]), (1, ["Quadrinho Coop"]))
-check("portfólio do fabio tem as 2 artes", len(pf["portfolio"]), 2)
 s, pf, _ = call("GET", "/users/fabio/profile", tf)
 check("fabio vê o próprio perfil completo", (pf["me"], pf["hiddenPersonalProjects"], len(pf["projects"])), (True, 0, 2))
 s, pf, _ = call("GET", "/users/aurora/profile", tf)
 check("perfil da empresa abre", s, 200)
-check("portfólio da empresa tem a heroína", art_bia["id"] in [x["id"] for x in pf.get("portfolio", [])], True)
 s, _, _ = call("GET", "/users/ninguem_aqui/profile", tf)
 check("perfil inexistente = 404", s, 404)
-s, _, _ = call("GET", "/users/bia/profile")
-check("perfil sem login", s in (401, 403, 200), True, f"status {s}")
-print("   (perfil sem login respondeu", s, ")")
+s, pf, _ = call("GET", "/users/bia/profile")
+check("perfil público sem login", s, 200)
+if s == 200:
+    check("sem login: NDA já liberado aparece normal", [p["name"] for p in pf["projects"] if p.get("nda")], [])
+    check("sem login: me=false", pf.get("me"), False)
+s, sec_p, _ = call("POST", "/projects", ta, {"name": "Projeto Secreto", "slug": f"secreto-{sfx}", "type": "CORPORATE"})
+call("PATCH", f"/projects/{sec_p['id']}/settings", ta, {"ndaEnabled": True})
+invite_accept(ta, sec_p["id"], tb, ub)
+s, pf, _ = call("GET", "/users/bia/profile")
+masked = [p for p in pf.get("projects", []) if p["masked"]]
+check("sem login: projeto sob NDA mascarado, sem nome", (len(masked), masked[0]["name"] if masked else "-"), (1, None))
+s, pf, _ = call("GET", "/users/bia/profile", tc)
+check("caio (fora do Projeto Secreto) também vê mascarado", sum(1 for p in pf["projects"] if p["masked"]), 1)
 
 # ------------------------------------------------------------------ 9. Atividade
 sec("9. Atividade e dashboard")
@@ -478,5 +475,5 @@ for sec_name, label, _, det in fails:
     print(f" - [{sec_name}] {label}: {det}")
 with open(sys.argv[1] if len(sys.argv) > 1 else "auditoria_resultado.json", "w", encoding="utf-8") as fh:
     json.dump({"sufixo": sfx, "resultados": [dict(secao=a, verificacao=b, ok=c, detalhe=d) for a, b, c, d in results],
-               "ids": {"corp": corp["id"], "coop": coop["id"], "pessoal": pess["id"], "art_bia": art_bia["id"],
+               "ids": {"corp": corp["id"], "coop": coop["id"], "pessoal": pess["id"], "post_bia": post_bia["id"],
                        "t_bia": t_bia["id"]}}, fh, ensure_ascii=False, indent=1)

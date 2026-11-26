@@ -47,7 +47,7 @@ class TaskFileServiceTest {
         fileRepository = mock(TaskFileRepository.class);
         service = new TaskFileService(new ProjectAccessService(projectRepository, memberRepository),
                 taskRepository, fileRepository, mock(PostService.class),
-                storage.toString(), 1);
+                new FileStorage(storage.toString()), 1);
 
         owner = user(1L);
         contractor = user(2L);
