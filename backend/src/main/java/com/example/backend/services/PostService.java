@@ -1,5 +1,6 @@
 package com.example.backend.services;
 
+import com.example.backend.config.BusinessTime;
 import com.example.backend.dto.PostResponse;
 import com.example.backend.dto.UserSummary;
 import com.example.backend.models.Post;
@@ -24,7 +25,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Comparator;
@@ -74,7 +74,7 @@ public class PostService {
     /** NDA ativo: corporativo com NDA ligado e sem data de liberação alcançada. */
     public static boolean ndaBlocks(Project project) {
         return project != null && project.getType() == ProjectType.CORPORATE && project.isNdaEnabled()
-                && (project.getNdaReleaseDate() == null || project.getNdaReleaseDate().isAfter(LocalDate.now()));
+                && (project.getNdaReleaseDate() == null || project.getNdaReleaseDate().isAfter(BusinessTime.today()));
     }
 
     /** Projeto aberto ao público: WIP automático ligado e sem NDA ativo. */
@@ -106,7 +106,7 @@ public class PostService {
     public List<PostResponse> feed(Long before, Integer limit) {
         int size = limit == null || limit < 1 ? 20 : Math.min(limit, MAX_FEED_PAGE);
         long cursor = before == null ? Long.MAX_VALUE : before;
-        return postRepository.findPublicFeed(cursor, LocalDate.now(), PageRequest.of(0, size)).stream()
+        return postRepository.findPublicFeed(cursor, BusinessTime.today(), PageRequest.of(0, size)).stream()
                 .filter(post -> !post.getImages().isEmpty() || post.getKind() == PostKind.PROJECT_PUBLISHED)
                 .map(this::toResponse)
                 .toList();

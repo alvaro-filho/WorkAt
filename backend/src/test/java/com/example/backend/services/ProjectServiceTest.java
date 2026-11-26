@@ -142,4 +142,31 @@ class ProjectServiceTest {
         assertEquals("Status inválido. Use ACTIVE ou CLOSED.", exception.getReason());
         verify(projectRepository, never()).save(any(Project.class));
     }
+
+    @Test
+    void rejectsNdaReleaseDateInThePast() {
+        project.setType(com.example.backend.models.ProjectType.CORPORATE);
+        when(projectRepository.findById(31L)).thenReturn(Optional.of(project));
+        String yesterday = com.example.backend.config.BusinessTime.today().minusDays(1).toString();
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> projectService.updateSettings(31L, creator, null, null, null, yesterday));
+        assertEquals(400, error.getStatusCode().value());
+        // Ano digitado pela metade no campo de data: precisa ser recusado, não liberar o NDA.
+        assertThrows(ResponseStatusException.class,
+                () -> projectService.updateSettings(31L, creator, null, null, null, "0002-01-25"));
+        verify(projectRepository, never()).save(any());
+    }
+
+    @Test
+    void acceptsNdaReleaseDateToday() {
+        project.setType(com.example.backend.models.ProjectType.CORPORATE);
+        when(projectRepository.findById(31L)).thenReturn(Optional.of(project));
+        when(projectRepository.save(project)).thenReturn(project);
+        java.time.LocalDate today = com.example.backend.config.BusinessTime.today();
+
+        projectService.updateSettings(31L, creator, null, true, null, today.toString());
+        assertEquals(today, project.getNdaReleaseDate());
+        assertFalse(PostService.ndaBlocks(project), "liberação hoje: o NDA já não vale");
+    }
 }

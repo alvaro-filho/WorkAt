@@ -36,6 +36,7 @@ import {
   type ProjectMember,
 } from "@/lib/api";
 import { logStatusActivity } from "@/lib/activity-api";
+import { todayString } from "@/lib/dates";
 import { useAuth } from "@/lib/AuthContext";
 import {
   canWorkOnTask,
@@ -638,9 +639,18 @@ function SettingsTab({
 }) {
   const navigate = useNavigate();
   const [confirmation, setConfirmation] = useState<"close" | "delete" | null>(null);
+  const [ndaConfirm, setNdaConfirm] = useState<"off" | "releaseToday" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closed = project.status === "CLOSED";
+  // A data só vai para o servidor no botão Salvar: salvar a cada tecla gravava anos pela metade
+  // (ex.: 0002) e derrubava o NDA na hora.
+  const [draftDate, setDraftDate] = useState(project.ndaReleaseDate ?? "");
+  useEffect(() => setDraftDate(project.ndaReleaseDate ?? ""), [project.ndaReleaseDate]);
+  const today = todayString();
+  const draftChanged = draftDate !== (project.ndaReleaseDate ?? "");
+  const draftValid = /^\d{4}-\d{2}-\d{2}$/.test(draftDate) && draftDate >= today;
+  const publicNow = project.autoWip;
 
   const setStatus = async (status: Project["status"]) => {
     setBusy(true);
@@ -665,11 +675,18 @@ function SettingsTab({
     setError(null);
     try {
       onProjectChange(await api.updateProjectSettings(project.id, payload));
+      setNdaConfirm(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível salvar a configuração.");
     } finally {
       setBusy(false);
     }
+  };
+
+  const saveReleaseDate = () => {
+    if (!draftValid) return;
+    if (draftDate === today) setNdaConfirm("releaseToday");
+    else void saveSetting({ ndaReleaseDate: draftDate });
   };
 
   const remove = async () => {
@@ -769,7 +786,11 @@ function SettingsTab({
             id="ndaEnabled"
             checked={project.ndaEnabled}
             disabled={busy}
-            onCheckedChange={(checked) => void saveSetting({ ndaEnabled: checked })}
+            onCheckedChange={(checked) =>
+              checked || !project.ndaActive
+                ? void saveSetting({ ndaEnabled: checked })
+                : setNdaConfirm("off")
+            }
           />
         </div>
       )}
@@ -787,11 +808,23 @@ function SettingsTab({
               id="ndaReleaseDate"
               type="date"
               className="w-auto"
-              value={project.ndaReleaseDate ?? ""}
+              min={today}
+              value={draftDate}
               disabled={busy}
-              onChange={(e) => void saveSetting({ ndaReleaseDate: e.target.value })}
+              onChange={(e) => setDraftDate(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveReleaseDate()}
             />
-            {project.ndaReleaseDate && (
+            {draftChanged && (
+              <Button size="sm" disabled={busy || !draftValid} onClick={saveReleaseDate}>
+                Salvar data
+              </Button>
+            )}
+            {draftChanged && (
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => setDraftDate(project.ndaReleaseDate ?? "")}>
+                Cancelar
+              </Button>
+            )}
+            {!draftChanged && project.ndaReleaseDate && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -802,8 +835,29 @@ function SettingsTab({
               </Button>
             )}
           </div>
+          {draftChanged && draftDate && !draftValid && (
+            <p className="text-sm text-destructive">
+              Escolha uma data a partir de hoje. Para liberar agora, use a data de hoje.
+            </p>
+          )}
         </div>
       )}
+      <ConfirmDialog
+        open={ndaConfirm !== null}
+        onOpenChange={(open) => !open && !busy && setNdaConfirm(null)}
+        title={ndaConfirm === "off" ? "Desligar o NDA?" : "Liberar o NDA hoje?"}
+        description={
+          publicNow
+            ? "O WIP automático está ligado: as artes do projeto ficam públicas agora, no feed, no Explorar e nos perfis dos contratados."
+            : "Os contratados passam a poder publicar as artes do projeto, e ele deixa de aparecer mascarado nos perfis."
+        }
+        confirmLabel={ndaConfirm === "off" ? "Desligar o NDA" : "Liberar hoje"}
+        destructive
+        busy={busy}
+        onConfirm={() =>
+          void saveSetting(ndaConfirm === "off" ? { ndaEnabled: false } : { ndaReleaseDate: draftDate })
+        }
+      />
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -860,7 +914,7 @@ function VisibilityBadge({ project }: { project: Project }) {
       <Badge variant="outline" className="border-amber-500/50 text-amber-300">
         <Lock className="mr-1 size-3" />
         {project.ndaReleaseDate
-          ? `NDA até ${new Date(`${project.ndaReleaseDate}T00:00:00`).toLocaleDateString("pt-BR")}`
+          ? `NDA · libera em ${new Date(`${project.ndaReleaseDate}T00:00:00`).toLocaleDateString("pt-BR")}`
           : "NDA"}
       </Badge>
     );

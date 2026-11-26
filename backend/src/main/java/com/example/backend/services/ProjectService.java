@@ -193,11 +193,18 @@ public class ProjectService {
         if (value.isBlank()) {
             return null;
         }
+        java.time.LocalDate date;
         try {
-            return java.time.LocalDate.parse(value.trim());
+            date = java.time.LocalDate.parse(value.trim());
         } catch (java.time.format.DateTimeParseException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Data de liberação inválida (use AAAA-MM-DD).");
         }
+        // Data no passado liberaria tudo na hora (ex.: ano digitado pela metade). Para liberar agora, use hoje.
+        if (date.isBefore(com.example.backend.config.BusinessTime.today())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A data de liberação não pode estar no passado. Para liberar agora, use a data de hoje.");
+        }
+        return date;
     }
 
     @Transactional
