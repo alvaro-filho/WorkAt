@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CalendarDays, FolderKanban, Globe, ImageIcon, Lock, Plus } from "lucide-react";
+import { CalendarDays, Check, ExternalLink, FolderKanban, Globe, ImageIcon, Lock, Pencil, Plus } from "lucide-react";
 
 import { ArtImage } from "@/components/art/ArtPieces";
 import { ActivityHeatmap } from "@/components/dashboard/ActivityHeatmap";
@@ -127,20 +127,64 @@ function ProfilePage() {
     >
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         <aside className="space-y-4">
-          <div className="gradient-primary flex aspect-square w-40 items-center justify-center rounded-full text-6xl font-semibold text-primary-foreground shadow-[var(--shadow-glow)] lg:w-full">
-            {user.fullName.slice(0, 1).toUpperCase()}
-          </div>
+          {user.avatarUrl ? (
+            <img
+              src={user.avatarUrl}
+              alt={`Foto de ${user.fullName}`}
+              className="aspect-square w-40 rounded-full object-cover shadow-[var(--shadow-glow)] lg:w-full"
+            />
+          ) : (
+            <div className="gradient-primary flex aspect-square w-40 items-center justify-center rounded-full text-6xl font-semibold text-primary-foreground shadow-[var(--shadow-glow)] lg:w-full">
+              {user.fullName.slice(0, 1).toUpperCase()}
+            </div>
+          )}
           <div>
             <h2 className="text-2xl font-semibold leading-tight">{user.fullName}</h2>
             <p className="text-lg text-muted-foreground">@{user.username}</p>
           </div>
           <Badge variant="outline">{isCompany ? "Estúdio / Empresa" : "Artista"}</Badge>
+          {profile.bio && <p className="text-sm whitespace-pre-wrap">{profile.bio}</p>}
+          {profile.specialties.length > 0 && (
+            <ul className="flex flex-wrap gap-1.5" aria-label="Especialidades">
+              {profile.specialties.map((item) => (
+                <li key={item}>
+                  <Badge variant="secondary" className="bg-white/10 font-normal">
+                    {item}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+          {profile.links.length > 0 && (
+            <ul className="space-y-1 text-sm" aria-label="Links">
+              {profile.links.map((link) => (
+                <li key={link}>
+                  <a
+                    href={link}
+                    target="_blank"
+                    rel="noopener noreferrer nofollow"
+                    className="inline-flex max-w-full items-center gap-1 text-primary hover:underline"
+                  >
+                    <ExternalLink className="size-3 shrink-0" />
+                    <span className="truncate">{link.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
           {profile.me && (
-            <Button asChild variant="outline" className="w-full">
-              <Link to="/projetos">
-                <Plus className="size-4" /> Novo projeto
-              </Link>
-            </Button>
+            <div className="grid gap-2">
+              <Button asChild variant="outline" className="w-full">
+                <Link to="/conta">
+                  <Pencil className="size-4" /> Editar perfil
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full">
+                <Link to="/projetos">
+                  <Plus className="size-4" /> Novo projeto
+                </Link>
+              </Button>
+            </div>
           )}
           <ul className="space-y-2 text-sm text-muted-foreground">
             <li className="flex items-center gap-2">
@@ -173,6 +217,7 @@ function ProfilePage() {
         </aside>
 
         <div className="min-w-0 space-y-8">
+          {profile.me && <FirstSteps profile={profile} onPublish={() => setComposerOpen(true)} />}
           <Tabs defaultValue="portfolio">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <TabsList>
@@ -401,5 +446,65 @@ function ProjectCard({ project, me }: { project: ProfileProject; me: boolean }) 
     </Link>
   ) : (
     <div className="glass rounded-2xl p-4">{body}</div>
+  );
+}
+
+
+/** Primeiros passos para conta nova: some sozinho quando tudo estiver feito. */
+function FirstSteps({ profile, onPublish }: { profile: Profile; onPublish: () => void }) {
+  const steps = [
+    {
+      done: Boolean(profile.user.avatarUrl || profile.bio),
+      label: "Coloque foto e bio no perfil",
+      action: (
+        <Link to="/conta" className="text-primary hover:underline">
+          Editar perfil
+        </Link>
+      ),
+    },
+    {
+      done: profile.projects.length + profile.hiddenPersonalProjects > 0,
+      label: "Crie seu primeiro projeto (há modelos prontos)",
+      action: (
+        <Link to="/projetos" className="text-primary hover:underline">
+          Criar projeto
+        </Link>
+      ),
+    },
+    {
+      done: profile.posts.length > 0,
+      label: "Publique sua primeira arte",
+      action: (
+        <button type="button" onClick={onPublish} className="text-primary hover:underline">
+          Publicar
+        </button>
+      ),
+    },
+  ];
+  const remaining = steps.filter((step) => !step.done).length;
+  if (remaining === 0) return null;
+  return (
+    <section className="glass rounded-2xl p-4" aria-labelledby="first-steps-title">
+      <h3 id="first-steps-title" className="text-sm font-semibold">
+        Primeiros passos · faltam {remaining}
+      </h3>
+      <ol className="mt-3 space-y-2">
+        {steps.map((step) => (
+          <li key={step.label} className="flex flex-wrap items-center gap-2 text-sm">
+            <span
+              aria-hidden="true"
+              className={`flex size-5 items-center justify-center rounded-full border ${
+                step.done ? "border-emerald-500 bg-emerald-500/20 text-emerald-300" : "border-border"
+              }`}
+            >
+              {step.done && <Check className="size-3" />}
+            </span>
+            <span className={step.done ? "text-muted-foreground line-through" : ""}>{step.label}</span>
+            {!step.done && <span className="ml-auto">{step.action}</span>}
+            <span className="sr-only">{step.done ? "(feito)" : "(pendente)"}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }

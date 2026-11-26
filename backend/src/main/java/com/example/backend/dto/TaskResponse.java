@@ -15,6 +15,7 @@ public class TaskResponse {
     private final TaskStatus status;
     private final LocalDate deadline;
     private final Long projectId;
+    private final String projectName;
     private final UserSummary assignee;
     private final LocalDateTime createdAt;
     private final LocalDateTime updatedAt;
@@ -28,6 +29,7 @@ public class TaskResponse {
         this.status = task.getStatus();
         this.deadline = task.getDeadline();
         this.projectId = task.getProject().getId();
+        this.projectName = task.getProject().getName();
         this.assignee = UserSummary.from(task.getAssignee());
         this.createdAt = task.getCreatedAt();
         this.updatedAt = task.getUpdatedAt();
@@ -43,6 +45,7 @@ public class TaskResponse {
     public TaskStatus getStatus() { return status; }
     public LocalDate getDeadline() { return deadline; }
     public Long getProjectId() { return projectId; }
+    public String getProjectName() { return projectName; }
     public UserSummary getAssignee() { return assignee; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

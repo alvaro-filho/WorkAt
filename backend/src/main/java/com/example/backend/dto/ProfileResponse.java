@@ -17,8 +17,18 @@ public record ProfileResponse(
         List<PostResponse> posts,
         List<ProfileProject> projects,
         int hiddenPersonalProjects,
-        List<HeatmapDTO> heatmap
+        List<HeatmapDTO> heatmap,
+        String bio,
+        List<String> specialties,
+        List<String> links
 ) {
+    public static List<String> split(String text, String separator) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(text.split(separator)).map(String::trim).filter(s -> !s.isEmpty()).toList();
+    }
+
     /**
      * Projeto como aparece no perfil. Mascarado (NDA): sem id, nome ou descrição, só para quem é o contratante.
      */

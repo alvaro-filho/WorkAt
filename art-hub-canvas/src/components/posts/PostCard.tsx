@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Eye, EyeOff, Globe, Lock, MoreHorizontal, Trash2 } from "lucide-react";
 
 import { ArtImage } from "@/components/art/ArtPieces";
+import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,14 +28,38 @@ export function relativeTime(value: string | null, now: number) {
   return new Date(value).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
-export function UserAvatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
+const AVATAR_SIZES = {
+  xs: "size-5 text-[10px]",
+  sm: "size-8 text-xs",
+  md: "size-10 text-sm",
+  lg: "size-28 text-4xl",
+} as const;
+
+/** Foto da pessoa; sem foto (ou se a imagem falhar), a inicial do nome. */
+export function UserAvatar({
+  name,
+  src,
+  size = "md",
+}: {
+  name: string;
+  src?: string | null | undefined;
+  size?: keyof typeof AVATAR_SIZES;
+}) {
+  const [failed, setFailed] = useState(false);
+  const classes = `flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold ${AVATAR_SIZES[size]}`;
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt=""
+        aria-hidden="true"
+        className={`${classes} object-cover`}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
   return (
-    <span
-      aria-hidden="true"
-      className={`gradient-primary flex shrink-0 items-center justify-center rounded-full font-semibold text-primary-foreground ${
-        size === "sm" ? "size-8 text-xs" : "size-10 text-sm"
-      }`}
-    >
+    <span aria-hidden="true" className={`gradient-primary text-primary-foreground ${classes}`}>
       {name.slice(0, 1).toUpperCase()}
     </span>
   );
@@ -140,13 +165,14 @@ export function PostCard({
     }
   };
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   const remove = async () => {
-    if (!window.confirm("Apagar esta publicação? Os arquivos da tarefa continuam no projeto."))
-      return;
     setBusy(true);
     setError(null);
     try {
       await api.deletePost(post.id);
+      setConfirmDelete(false);
       onDeleted?.(post.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível apagar.");
@@ -161,7 +187,7 @@ export function PostCard({
         params={{ username: post.author.username }}
         aria-label={`Perfil de ${post.author.fullName}`}
       >
-        <UserAvatar name={post.author.fullName} />
+        <UserAvatar name={post.author.fullName} src={post.author.avatarUrl} />
       </Link>
       <article className="min-w-0 flex-1">
         <header className="flex items-start gap-2">
@@ -216,7 +242,7 @@ export function PostCard({
                 {onDeleted && (
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
-                    onSelect={() => void remove()}
+                    onSelect={() => setConfirmDelete(true)}
                   >
                     <Trash2 className="mr-2 size-4" /> Apagar publicação
                   </DropdownMenuItem>
@@ -262,6 +288,16 @@ export function PostCard({
           </p>
         )}
       </article>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Apagar esta publicação?"
+        description="Ela sai do feed e do portfólio. Os arquivos da tarefa continuam no projeto."
+        confirmLabel="Apagar"
+        destructive
+        busy={busy}
+        onConfirm={() => void remove()}
+      />
     </li>
   );
 }

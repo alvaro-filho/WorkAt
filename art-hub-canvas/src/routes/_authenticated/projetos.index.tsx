@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Check, Mail, Plus, X } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { refreshMenuCounts } from "@/components/layout/AppSidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { api, type Project, type ProjectInvitation, type ProjectType } from "@/lib/api";
+import { api, type Project, type ProjectInvitation, type ProjectTemplate, type ProjectType } from "@/lib/api";
 import { makeSlug, PROJECT_TYPES, projectTypeInfo, roleLabel } from "@/lib/project-labels";
 
 export const Route = createFileRoute("/_authenticated/projetos/")({
@@ -222,6 +223,7 @@ function InvitationsPanel({
     try {
       if (accept) await api.acceptInvitation(invitation.id);
       else await api.declineInvitation(invitation.id);
+      refreshMenuCounts();
       await onAnswered(invitation, accept);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível responder ao convite.");
@@ -295,6 +297,8 @@ function CreateProjectDialog({
   const [type, setType] = useState<ProjectType>(initialType);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [template, setTemplate] = useState("");
+  const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -303,9 +307,18 @@ function CreateProjectDialog({
       setType(initialType);
       setName("");
       setDescription("");
+      setTemplate("");
       setError(null);
+      if (templates.length === 0) {
+        api
+          .projectTemplates()
+          .then(setTemplates)
+          .catch(() => setTemplates([]));
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialType]);
+  const chosenTemplate = templates.find((item) => item.id === template);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -317,6 +330,7 @@ function CreateProjectDialog({
         description: description.trim() || undefined,
         slug: makeSlug(name),
         type,
+        template: template || undefined,
       });
       onOpenChange(false);
       onCreated(project);
@@ -387,6 +401,30 @@ function CreateProjectDialog({
               placeholder="Opcional"
             />
           </div>
+
+          {templates.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="projectTemplate">Começar com um modelo</Label>
+              <select
+                id="projectTemplate"
+                value={template}
+                onChange={(e) => setTemplate(e.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Projeto em branco</option>
+                {templates.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} ({item.tasks.length} tarefas)
+                  </option>
+                ))}
+              </select>
+              {chosenTemplate && (
+                <p className="text-xs text-muted-foreground">
+                  {chosenTemplate.description} Tarefas: {chosenTemplate.tasks.map((t) => t.title).join(", ")}.
+                </p>
+              )}
+            </div>
+          )}
 
           {error && (
             <p role="alert" className="text-sm text-destructive">

@@ -16,6 +16,8 @@ interface AuthContextType {
     role: "ARTIST" | "COMPANY",
   ) => Promise<void>;
   logout: () => void;
+  /** Atualiza nome/foto no menu depois de editar o perfil. */
+  updateUser: (changes: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -48,6 +50,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setIsLoading(false);
   }, []);
+
+  // Nome e foto podem ter mudado em outro aparelho: atualiza ao abrir o site.
+  useEffect(() => {
+    if (!token) return;
+    api
+      .me()
+      .then((me) => updateUser({ fullName: me.fullName, avatarUrl: me.avatarUrl }))
+      .catch(() => {
+        // Sem conexão: continua com o que estava salvo.
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
@@ -93,6 +107,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateUser = (changes: Partial<User>) => {
+    setUser((current) => {
+      if (!current) return current;
+      const next = { ...current, ...changes };
+      window.localStorage.setItem("userProfile", JSON.stringify(next));
+      return next;
+    });
+  };
+
   const logout = () => {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("authToken");
@@ -104,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: !!token, isLoading, login, register, logout }}
+      value={{ user, isAuthenticated: !!token, isLoading, login, register, logout, updateUser }}
     >
       {children}
     </AuthContext.Provider>

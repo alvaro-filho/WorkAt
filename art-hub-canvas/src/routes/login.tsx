@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Building2, Chrome, Palette, Sparkles, User } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Building2, Palette, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -175,22 +175,19 @@ function LoginPage() {
           {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
         </form>
 
-        <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="h-px flex-1 bg-border" />
-          ou continue com
-          <span className="h-px flex-1 bg-border" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Button variant="outline" className="bg-white/5">
-            <Chrome className="size-4" />
-            Google
-          </Button>
-          <Button variant="outline" className="bg-white/5">
-            <Sparkles className="size-4" />
-            ArtStation
-          </Button>
-        </div>
+        {mode === "entrar" && (
+          <p className="mt-4 text-center text-sm">
+            <Link to="/esqueci-senha" className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+              Esqueci minha senha
+            </Link>
+          </p>
+        )}
+        <p className="mt-3 text-center text-sm text-muted-foreground">
+          Quer só olhar?{" "}
+          <Link to="/publicacoes" className="text-primary underline-offset-4 hover:underline">
+            Ver as publicações da comunidade
+          </Link>
+        </p>
       </div>
     </div>
   );

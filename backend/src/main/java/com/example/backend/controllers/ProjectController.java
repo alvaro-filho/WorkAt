@@ -53,11 +53,23 @@ public class ProjectController {
     }
 
     /** Qualquer conta (artista ou empresa) pode criar projetos de qualquer tipo. */
+    private com.example.backend.services.ProjectExtrasService extras;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setExtras(com.example.backend.services.ProjectExtrasService extras) {
+        this.extras = extras;
+    }
+
     @PostMapping
     public ResponseEntity<ProjectResponse> createProject(@RequestBody ProjectCreateRequest projectDetails,
                                                          Authentication authentication) {
         User creator = findAuthenticatedUser(authentication);
+        // Modelo inválido falha antes de criar o projeto.
+        com.example.backend.services.ProjectExtrasService.template(projectDetails.getTemplate());
         var created = projectService.createProject(projectDetails.toNewProject(), creator);
+        if (extras != null) {
+            extras.applyTemplate(created, creator, projectDetails.getTemplate());
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(ProjectResponse.from(created, creator));
     }
 

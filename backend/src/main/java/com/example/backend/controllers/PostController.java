@@ -28,6 +28,13 @@ public class PostController {
     private final PostService postService;
     private final UserRepository userRepository;
 
+    private com.example.backend.services.TaskFileService taskFileService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTaskFileService(com.example.backend.services.TaskFileService taskFileService) {
+        this.taskFileService = taskFileService;
+    }
+
     public PostController(PostService postService, UserRepository userRepository) {
         this.postService = postService;
         this.userRepository = userRepository;
@@ -47,7 +54,7 @@ public class PostController {
                                                Authentication authentication) {
         User user = requireUser(authentication);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(postService.toResponse(postService.createStandalone(user, file, title, subtitle)));
+                .body(postService.toResponse(createWithinQuota(user, file, title, subtitle)));
     }
 
     @PostMapping("/api/v1/files/{fileId}/post")
@@ -105,5 +112,14 @@ public class PostController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuário autenticado não identificado.");
         }
         return user;
+    }
+
+    /** Post avulso também conta na cota de espaço da pessoa. */
+    private com.example.backend.models.Post createWithinQuota(User user, org.springframework.web.multipart.MultipartFile file,
+                                                              String title, String subtitle) {
+        if (taskFileService != null && file != null) {
+            taskFileService.ensureQuota(user, file.getSize());
+        }
+        return postService.createStandalone(user, file, title, subtitle);
     }
 }

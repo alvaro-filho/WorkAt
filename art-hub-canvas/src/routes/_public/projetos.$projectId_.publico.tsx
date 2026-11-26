@@ -134,7 +134,7 @@ function PublicProjectPage() {
                 params={{ username: person.username }}
                 className="flex items-center gap-2 rounded-full pr-3 hover:bg-white/5"
               >
-                <UserAvatar name={person.fullName} size="sm" />
+                <UserAvatar name={person.fullName} src={person.avatarUrl} size="sm" />
                 <span className="text-sm">{person.fullName}</span>
               </Link>
             ))}

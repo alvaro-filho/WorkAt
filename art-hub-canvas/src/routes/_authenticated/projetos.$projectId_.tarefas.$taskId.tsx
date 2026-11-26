@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { CommentsSection, ReviewPanel } from "@/components/tasks/TaskWorkflow";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,6 +53,7 @@ import {
 } from "@/lib/api";
 import { logActivity, logStatusActivity } from "@/lib/activity-api";
 import { useAuth } from "@/lib/AuthContext";
+import { isOverdue } from "@/lib/dates";
 import { canWorkOnTask, projectPermissions } from "@/lib/project-labels";
 
 export const Route = createFileRoute("/_authenticated/projetos/$projectId_/tarefas/$taskId")({
@@ -98,6 +100,7 @@ function TaskPage() {
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [commentsKey, setCommentsKey] = useState(0);
 
   const loadFiles = useCallback(async () => {
     setFiles(await api.taskFiles(taskId));
@@ -172,6 +175,10 @@ function TaskPage() {
   const permissions = projectPermissions(project);
   const canWork = canWorkOnTask(project, task, user?.id);
   const finalImage = files.find((file) => file.finalImage) ?? null;
+  const isCorporate = project.type === "CORPORATE";
+  // No corporativo, quem conclui é o dono (ao aprovar) e só ele reabre uma tarefa aprovada.
+  const contractorOnly = isCorporate && !permissions.owner;
+  const closed = project.status === "CLOSED";
   const assigneeOptions = [
     ...(project.owner ? [{ id: project.owner.id, fullName: project.owner.fullName }] : []),
     ...members.map((member) => ({ id: member.user.id, fullName: member.user.fullName })),
@@ -245,6 +252,16 @@ function TaskPage() {
             </p>
           </section>
 
+          <ReviewPanel
+            task={task}
+            isOwner={permissions.owner}
+            isCorporate={isCorporate}
+            canWork={canWork}
+            closed={closed}
+            onTaskChange={setTask}
+            onReviewed={() => setCommentsKey((k) => k + 1)}
+          />
+
           {finalImage && <FinalImage file={finalImage} />}
 
           <DeliveriesSection
@@ -258,6 +275,15 @@ function TaskPage() {
             onChanged={loadFiles}
             onUploaded={() => logActivity("FILE_UPLOAD", project.id)}
             onError={setError}
+          />
+
+          <CommentsSection
+            taskId={task.id}
+            files={files}
+            currentUserId={user?.id}
+            isOwner={permissions.owner}
+            closed={closed}
+            reloadKey={commentsKey}
           />
         </div>
 
@@ -290,13 +316,18 @@ function TaskPage() {
               <select
                 id="taskStatus"
                 value={task.status}
-                disabled={!canWork}
+                disabled={!canWork || (contractorOnly && task.status === "DONE")}
                 onChange={(e) => void changeStatus(e.target.value as ApiTaskStatus)}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-60"
               >
                 {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
+                  <option
+                    key={option.value}
+                    value={option.value}
+                    disabled={contractorOnly && option.value === "DONE" && task.status !== "DONE"}
+                  >
                     {option.label}
+                    {contractorOnly && option.value === "DONE" && task.status !== "DONE" ? " (o dono aprova)" : ""}
                   </option>
                 ))}
               </select>
@@ -327,8 +358,11 @@ function TaskPage() {
               </div>
             )}
 
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div
+              className={`flex items-center gap-2 text-sm ${isOverdue(task.deadline, task.status) ? "font-medium text-destructive" : "text-muted-foreground"}`}
+            >
               <CalendarClock className="size-4" /> Prazo: {formatDate(task.deadline)}
+              {isOverdue(task.deadline, task.status) && " · atrasada"}
             </div>
           </section>
 

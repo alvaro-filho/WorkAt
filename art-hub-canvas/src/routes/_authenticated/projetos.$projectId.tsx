@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Eye, Globe, Lock, LogOut, Mail, UserMinus } from "lucide-react";
+import { ArrowLeft, Crown, Download, Eye, Globe, History, Lock, LogOut, Mail, UserMinus, X } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
+import { relativeTime, UserAvatar } from "@/components/posts/PostCard";
 import { GanttView } from "@/components/kanban/GanttView";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import {
@@ -24,6 +26,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   api,
   ApiError,
+  downloadWithAuth,
+  type HistoryEntry,
   type ApiPriority,
   type ApiTask,
   type ApiTaskStatus,
@@ -186,11 +190,24 @@ function ProjectPage() {
             </p>
           )}
         </div>
-        <Button asChild variant="outline" size="sm" className="shrink-0">
-          <Link to="/projetos/$projectId/publico" params={{ projectId: String(project.id) }}>
-            <Eye className="mr-1 size-4" /> Ver como público
-          </Link>
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              void downloadWithAuth(`/projects/${project.id}/finals.zip`, "finais.zip").catch((e) =>
+                setError(e instanceof Error ? e.message : "Não foi possível baixar."),
+              )
+            }
+          >
+            <Download className="mr-1 size-4" /> Baixar finais (.zip)
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/projetos/$projectId/publico" params={{ projectId: String(project.id) }}>
+              <Eye className="mr-1 size-4" /> Ver como público
+            </Link>
+          </Button>
+        </div>
       </header>
 
       {error && (
@@ -200,10 +217,11 @@ function ProjectPage() {
       )}
 
       <Tabs defaultValue="quadro">
-        <TabsList className="bg-white/5">
+        <TabsList className="max-w-full justify-start overflow-x-auto bg-white/5">
           <TabsTrigger value="quadro">Quadro</TabsTrigger>
           <TabsTrigger value="cronograma">Cronograma</TabsTrigger>
           {permissions.hasMembers && <TabsTrigger value="membros">Membros</TabsTrigger>}
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
           {permissions.owner && <TabsTrigger value="config">Configurações</TabsTrigger>}
         </TabsList>
 
@@ -215,12 +233,13 @@ function ProjectPage() {
             closed={closed}
             canManageTasks={permissions.canManageTasks}
             canMoveTask={(task) => canWorkOnTask(project, task, user?.id)}
+            canFinishTask={() => project.type !== "CORPORATE" || permissions.owner}
             assigneeOptions={assigneeOptions}
             readOnlyHint={
               project.type === "CORPORATE" && !permissions.owner
                 ? project.contractorsSeeAllTasks
-                  ? "Você vê todas as tarefas do projeto, mas só move e envia arquivos nas atribuídas a você."
-                  : "Aqui aparecem só as tarefas atribuídas a você. Abra uma para enviar seus arquivos."
+                  ? "Você vê todas as tarefas, mas só mexe nas suas. Quando terminar, mova para Em Revisão: o dono aprova."
+                  : "Aqui aparecem só as suas tarefas. Quando terminar, mova para Em Revisão: o dono aprova."
                 : undefined
             }
             onCreateTask={createTask}
@@ -244,6 +263,10 @@ function ProjectPage() {
           </TabsContent>
         )}
 
+        <TabsContent value="historico" className="mt-4">
+          <HistoryTab projectId={project.id} />
+        </TabsContent>
+
         {permissions.owner && (
           <TabsContent value="config" className="mt-4">
             <SettingsTab project={project} onProjectChange={setProject} />
@@ -263,6 +286,8 @@ function MembersTab({ project }: { project: Project }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [toRemove, setToRemove] = useState<ProjectMember | null>(null);
+  const [toOwner, setToOwner] = useState<ProjectMember | null>(null);
   const memberLabel = project.type === "CORPORATE" ? "contratado" : "membro";
 
   const load = useCallback(async () => {
@@ -306,14 +331,45 @@ function MembersTab({ project }: { project: Project }) {
 
   const remove = async (member: ProjectMember) => {
     setMessage(null);
+    setBusy(true);
     try {
       await api.removeMember(project.id, member.user.id);
+      setToRemove(null);
       await load();
     } catch (e) {
+      setToRemove(null);
       setMessage({
         kind: "error",
         text: e instanceof Error ? e.message : "Não foi possível remover.",
       });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const transfer = async (member: ProjectMember) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await api.transferProject(project.id, member.user.id);
+      // Quem passou o projeto vira membro: recarrega a página com o novo papel.
+      window.location.reload();
+    } catch (e) {
+      setToOwner(null);
+      setMessage({ kind: "error", text: e instanceof Error ? e.message : "Não foi possível passar o projeto." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancelInvite = async (invitation: ProjectInvitation) => {
+    setMessage(null);
+    try {
+      await api.cancelInvitation(project.id, invitation.id);
+      setMessage({ kind: "ok", text: `Convite de ${invitation.invitedUser.fullName} cancelado.` });
+      await load();
+    } catch (e) {
+      setMessage({ kind: "error", text: e instanceof Error ? e.message : "Não foi possível cancelar." });
     }
   };
 
@@ -339,6 +395,7 @@ function MembersTab({ project }: { project: Project }) {
             <PersonRow
               name={project.owner.fullName}
               username={project.owner.username}
+              avatarUrl={project.owner.avatarUrl}
               label="Dono"
               highlight
             />
@@ -348,17 +405,30 @@ function MembersTab({ project }: { project: Project }) {
               key={member.user.id}
               name={member.user.fullName}
               username={member.user.username}
+              avatarUrl={member.user.avatarUrl}
               label={roleLabel("MEMBER", project.type)}
               action={
                 permissions.owner ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void remove(member)}
-                    aria-label={`Remover ${member.user.fullName}`}
-                  >
-                    <UserMinus className="size-4" />
-                  </Button>
+                  <div className="flex">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setToOwner(member)}
+                      aria-label={`Passar o projeto para ${member.user.fullName}`}
+                      title="Passar o projeto para esta pessoa"
+                    >
+                      <Crown className="size-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setToRemove(member)}
+                      aria-label={`Remover ${member.user.fullName}`}
+                      title="Remover do projeto"
+                    >
+                      <UserMinus className="size-4" />
+                    </Button>
+                  </div>
                 ) : undefined
               }
             />
@@ -404,11 +474,22 @@ function MembersTab({ project }: { project: Project }) {
               <h4 className="mb-2 text-xs font-semibold text-muted-foreground">
                 Convites pendentes
               </h4>
+              <p className="mb-2 text-xs text-muted-foreground">Convites expiram em 30 dias sem resposta.</p>
               <ul className="space-y-1 text-sm">
                 {pending.map((invitation) => (
-                  <li key={invitation.id} className="flex justify-between gap-2">
-                    <span className="truncate">{invitation.invitedUser.fullName}</span>
+                  <li key={invitation.id} className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate">{invitation.invitedUser.fullName}</span>
                     <span className="text-xs text-muted-foreground">aguardando</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="size-7 p-0"
+                      aria-label={`Cancelar convite de ${invitation.invitedUser.fullName}`}
+                      title="Cancelar convite"
+                      onClick={() => void cancelInvite(invitation)}
+                    >
+                      <X className="size-4" />
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -425,6 +506,26 @@ function MembersTab({ project }: { project: Project }) {
           {message.text}
         </p>
       )}
+
+      <ConfirmDialog
+        open={toRemove !== null}
+        onOpenChange={(open) => !open && setToRemove(null)}
+        title={`Remover ${toRemove?.user.fullName ?? ""}?`}
+        description="A pessoa perde o acesso ao projeto e as tarefas dela ficam sem responsável."
+        confirmLabel="Remover"
+        destructive
+        busy={busy}
+        onConfirm={() => toRemove && void remove(toRemove)}
+      />
+      <ConfirmDialog
+        open={toOwner !== null}
+        onOpenChange={(open) => !open && setToOwner(null)}
+        title={`Passar o projeto para ${toOwner?.user.fullName ?? ""}?`}
+        description="A pessoa vira dona do projeto (configurações, convites, revisão). Você continua como membro."
+        confirmLabel="Passar o projeto"
+        busy={busy}
+        onConfirm={() => toOwner && void transfer(toOwner)}
+      />
 
       <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
         <AlertDialogContent>
@@ -455,21 +556,21 @@ function MembersTab({ project }: { project: Project }) {
 function PersonRow({
   name,
   username,
+  avatarUrl,
   label,
   highlight = false,
   action,
 }: {
   name: string;
   username: string;
+  avatarUrl?: string | null | undefined;
   label: string;
   highlight?: boolean;
   action?: React.ReactNode;
 }) {
   return (
     <li className="flex items-center gap-3 py-2">
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold">
-        {name.slice(0, 1).toUpperCase()}
-      </div>
+      <UserAvatar name={name} src={avatarUrl} size="sm" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{name}</p>
         <p className="truncate text-xs text-muted-foreground">@{username}</p>
@@ -479,6 +580,52 @@ function PersonRow({
       </Badge>
       {action}
     </li>
+  );
+}
+
+/** Linha do tempo do projeto: quem fez o quê e quando. */
+function HistoryTab({ projectId }: { projectId: number }) {
+  const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const now = Date.now();
+
+  useEffect(() => {
+    api
+      .projectHistory(projectId)
+      .then(setEntries)
+      .catch((e) => setError(e instanceof Error ? e.message : "Não foi possível carregar o histórico."));
+  }, [projectId]);
+
+  if (error)
+    return (
+      <div role="alert" className="glass rounded-2xl p-4 text-sm text-destructive">
+        {error}
+      </div>
+    );
+  if (!entries) return <div className="glass h-40 animate-pulse rounded-2xl" />;
+  if (entries.length === 0)
+    return (
+      <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
+        <History className="mx-auto mb-2 size-6" />
+        Nada registrado ainda. Tarefas criadas, movidas, revisadas e arquivos enviados aparecem aqui.
+      </div>
+    );
+  return (
+    <ol className="glass divide-y divide-border overflow-hidden rounded-2xl">
+      {entries.map((entry) => (
+        <li key={entry.id} className="flex items-start gap-3 p-3">
+          <UserAvatar name={entry.actor?.fullName ?? "?"} src={entry.actor?.avatarUrl} size="sm" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm">{entry.message}</p>
+            <p className="text-xs text-muted-foreground">
+              <time dateTime={entry.createdAt} title={new Date(entry.createdAt).toLocaleString("pt-BR")}>
+                {relativeTime(entry.createdAt, now)}
+              </time>
+            </p>
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }
 

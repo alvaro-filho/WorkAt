@@ -23,6 +23,8 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class TaskFileServiceTest {
@@ -68,6 +70,8 @@ class TaskFileServiceTest {
         });
         when(fileRepository.findByTaskOrderByVersionDesc(task)).thenAnswer(invocation -> List.copyOf(saved));
         when(fileRepository.countByTask(task)).thenAnswer(invocation -> (long) saved.size());
+        when(fileRepository.countByTaskAndOriginalNameIgnoreCase(eq(task), anyString())).thenAnswer(invocation ->
+                saved.stream().filter(f -> f.getOriginalName().equalsIgnoreCase(invocation.getArgument(1))).count());
     }
 
     @Test
@@ -86,10 +90,12 @@ class TaskFileServiceTest {
 
     @Test
     void versionsGrowAndOnlyOneFinalImage() {
-        TaskFile first = service.upload(9L, owner, multipart("rascunho.png", 10), true);
-        TaskFile second = service.upload(9L, owner, multipart("final.png", 10), true);
+        TaskFile first = service.upload(9L, owner, multipart("heroina.png", 10), true);
+        TaskFile second = service.upload(9L, owner, multipart("heroina.png", 10), true);
+        TaskFile other = service.upload(9L, owner, multipart("cenario.psd", 10), false);
 
         assertEquals(2, second.getVersion());
+        assertEquals(1, other.getVersion(), "outro arquivo começa a própria contagem");
         assertTrue(second.isFinalImage());
         assertFalse(first.isFinalImage());
     }

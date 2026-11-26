@@ -5,6 +5,7 @@ export interface ApiUser {
   email: string;
   role: "ARTIST" | "COMPANY";
   userType?: string;
+  avatarUrl?: string | null;
 }
 
 export interface AuthResponse {
@@ -21,6 +22,8 @@ export interface UserSummary {
   fullName: string;
   username: string;
   role: ApiUser["role"];
+  /** Foto do perfil (null = mostrar a inicial do nome). */
+  avatarUrl?: string | null;
 }
 
 export interface Project {
@@ -74,7 +77,7 @@ export interface ProjectInvitation {
   projectType: ProjectType;
   invitedUser: UserSummary;
   invitedBy: UserSummary;
-  status: "PENDING" | "ACCEPTED" | "DECLINED";
+  status: "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED" | "EXPIRED";
   createdAt: string;
 }
 
@@ -148,6 +151,9 @@ export interface Profile {
   projects: ProfileProject[];
   hiddenPersonalProjects: number;
   heatmap: { date: string; count: number }[];
+  bio: string | null;
+  specialties: string[];
+  links: string[];
 }
 
 export type ApiTaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE";
@@ -161,11 +167,88 @@ export interface ApiTask {
   status: ApiTaskStatus;
   deadline: string | null;
   projectId: number;
+  /** Nome do projeto (útil em "Minhas tarefas"). */
+  projectName?: string;
   assignee: UserSummary | null;
   createdAt: string;
   updatedAt: string;
   /** Tarefa interna: fora da visão pública e não gera WIP. */
   hiddenFromPublic: boolean;
+}
+
+export interface AppNotification {
+  id: number;
+  type: string;
+  message: string;
+  /** Caminho no site para abrir ao clicar. */
+  link: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface TaskComment {
+  id: number;
+  /** COMMENT, ou o registro da revisão: CHANGES_REQUESTED / APPROVED. */
+  kind: "COMMENT" | "CHANGES_REQUESTED" | "APPROVED";
+  body: string;
+  author: UserSummary;
+  fileId: number | null;
+  fileVersion: number | null;
+  fileName: string | null;
+  createdAt: string;
+}
+
+export interface HistoryEntry {
+  id: number;
+  type: string;
+  message: string;
+  actor: UserSummary | null;
+  taskId: number | null;
+  createdAt: string;
+}
+
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  description: string;
+  tasks: { title: string; description: string; priority: ApiPriority }[];
+}
+
+export interface Account {
+  id: number;
+  fullName: string;
+  username: string;
+  email: string;
+  role: ApiUser["role"];
+  avatarUrl: string | null;
+  bio: string | null;
+  specialties: string[];
+  links: string[];
+  createdAt: string | null;
+  storageUsedBytes: number;
+  storageQuotaBytes: number;
+}
+
+/** Texto do backend que não serve para quem usa o site vira uma frase clara, pelo código HTTP. */
+export function friendlyError(status: number, message: string | null | undefined): string {
+  const text = (message ?? "").trim();
+  const technical =
+    !text ||
+    /^A solicitação falhou/.test(text) ||
+    /^(Bad Request|Forbidden|Not Found|Internal Server Error|Unauthorized|Conflict)$/i.test(text) ||
+    /Request processing failed|Exception|<html/i.test(text);
+  if (!technical) return text;
+  if (status === 0) return "Sem conexão com o servidor. Verifique a internet e tente de novo.";
+  if (status === 400) return "Confira os dados informados e tente de novo.";
+  if (status === 401) return "Sua sessão expirou. Entre de novo.";
+  if (status === 403) return "Você não tem permissão para fazer isso.";
+  if (status === 404) return "Não encontramos isso. Talvez tenha sido apagado.";
+  if (status === 409) return "Isso mudou enquanto você estava na página. Atualize e tente de novo.";
+  if (status === 410) return "Isso não está mais disponível.";
+  if (status === 413) return "O arquivo é grande demais.";
+  if (status === 415) return "Esse tipo de arquivo não é aceito.";
+  if (status >= 500) return "O servidor teve um problema. Tente de novo em instantes.";
+  return "Algo deu errado. Tente de novo.";
 }
 
 export class ApiError extends Error {
@@ -249,12 +332,18 @@ async function request<T>(
   const token = window.localStorage.getItem("authToken");
   if (token && options.sendAuthorization !== false) headers.set("Authorization", `Bearer ${token}`);
 
-  const { response, responseText } = await trackSlow(
-    fetch(`/api/v1${path}`, { ...init, headers }).then(async (res) => ({
-      response: res,
-      responseText: await res.text(),
-    })),
-  );
+  let result: { response: Response; responseText: string };
+  try {
+    result = await trackSlow(
+      fetch(`/api/v1${path}`, { ...init, headers }).then(async (res) => ({
+        response: res,
+        responseText: await res.text(),
+      })),
+    );
+  } catch {
+    throw new ApiError(friendlyError(0, null), 0);
+  }
+  const { response, responseText } = result;
   let data: unknown;
   try {
     data = responseText ? JSON.parse(responseText) : undefined;
@@ -283,7 +372,7 @@ async function request<T>(
       if (authFailure === "logout") clearSession();
       if (authFailure === "verify-session") await verifySession();
     }
-    throw new ApiError(message || `A solicitação falhou (${response.status}).`, response.status);
+    throw new ApiError(friendlyError(response.status, message), response.status);
   }
 
   return data as T;
@@ -340,6 +429,8 @@ export const api = {
     slug: string;
     description?: string | undefined;
     type: ProjectType;
+    /** Modelo com tarefas iniciais (ver projectTemplates). */
+    template?: string | undefined;
   }) =>
     request<Project>(
       "/projects",
@@ -470,6 +561,71 @@ export const api = {
     payload: { title?: string; subtitle?: string; hiddenFromPortfolio?: boolean },
   ) => request<Post>(`/posts/${postId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deletePost: (postId: number) => request<void>(`/posts/${postId}`, { method: "DELETE" }),
+  // ---- Fluxo de trabalho ----
+  myTasks: () => request<ApiTask[]>("/me/tasks"),
+  reviewTask: (taskId: number, decision: "APPROVE" | "REQUEST_CHANGES", note?: string) =>
+    request<ApiTask>(`/tasks/${taskId}/review`, {
+      method: "POST",
+      body: JSON.stringify({ decision, note }),
+    }),
+  comments: (taskId: number) =>
+    request<TaskComment[]>(`/tasks/${taskId}/comments`, {}, { authFailure: "verify-session" }),
+  addComment: (taskId: number, body: string, fileId?: number | null) =>
+    request<TaskComment>(`/tasks/${taskId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body, fileId: fileId ?? null }),
+    }),
+  deleteComment: (commentId: number) => request<void>(`/comments/${commentId}`, { method: "DELETE" }),
+  notifications: () =>
+    request<{ unread: number; items: AppNotification[] }>("/notifications", {}, { authFailure: "verify-session" }),
+  unreadNotifications: () =>
+    request<{ unread: number }>("/notifications/unread-count", {}, { authFailure: "ignore" }),
+  readNotification: (id: number) =>
+    request<AppNotification>(`/notifications/${id}/read`, { method: "POST" }),
+  readAllNotifications: () => request<void>("/notifications/read-all", { method: "POST" }),
+  projectHistory: (projectId: number) =>
+    request<HistoryEntry[]>(`/projects/${projectId}/history`, {}, { authFailure: "verify-session" }),
+  transferProject: (projectId: number, userId: number) =>
+    request<Project>(`/projects/${projectId}/transfer`, {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    }),
+  cancelInvitation: (projectId: number, invitationId: number) =>
+    request<void>(`/projects/${projectId}/invitations/${invitationId}`, { method: "DELETE" }),
+  projectTemplates: () => request<ProjectTemplate[]>("/project-templates"),
+  // ---- Conta ----
+  me: () => request<Account>("/me"),
+  updateProfile: (payload: {
+    fullName?: string;
+    bio?: string;
+    specialties?: string[];
+    links?: string[];
+  }) => request<Account>("/me/profile", { method: "PATCH", body: JSON.stringify(payload) }),
+  uploadAvatar: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<Account>("/me/avatar", { method: "POST", body: form });
+  },
+  removeAvatar: () => request<Account>("/me/avatar", { method: "DELETE" }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ message: string }>("/me/password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  forgotPassword: (email: string) =>
+    request<{ message: string }>(
+      "/auth/forgot-password",
+      { method: "POST", body: JSON.stringify({ email }) },
+      { authFailure: "ignore", sendAuthorization: false },
+    ),
+  resetPassword: (token: string, newPassword: string) =>
+    request<{ message: string }>(
+      "/auth/reset-password",
+      { method: "POST", body: JSON.stringify({ token, newPassword }) },
+      { authFailure: "ignore", sendAuthorization: false },
+    ),
+  deleteAccount: (password: string) =>
+    request<void>("/me/delete", { method: "POST", body: JSON.stringify({ password }) }),
   publicProject: (projectId: number, order: "asc" | "desc" = "asc") =>
     request<PublicProject>(
       `/projects/${projectId}/public?order=${order}`,
@@ -528,4 +684,40 @@ export async function fetchFileBlob(fileId: number): Promise<Blob> {
   if (!response.ok)
     throw new ApiError(`Não foi possível baixar o arquivo (${response.status}).`, response.status);
   return response.blob();
+}
+
+/**
+ * Baixa um arquivo que exige login (ex.: .zip das finais, exportação de dados) e salva com o nome
+ * que o servidor mandar.
+ */
+export async function downloadWithAuth(path: string, fallbackName: string): Promise<void> {
+  const token = window.localStorage.getItem("authToken");
+  let response: Response;
+  try {
+    response = await fetch(`/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  } catch {
+    throw new ApiError(friendlyError(0, null), 0);
+  }
+  if (!response.ok) {
+    let message: string | null = null;
+    try {
+      const data = (await response.json()) as { message?: string };
+      message = data.message ?? null;
+    } catch {
+      // Sem corpo JSON: fica a mensagem padrão do código HTTP.
+    }
+    throw new ApiError(friendlyError(response.status, message), response.status);
+  }
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const plain = /filename="?([^";]+)"?/i.exec(disposition)?.[1];
+  const name = utf8 ? decodeURIComponent(utf8) : (plain ?? fallbackName);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

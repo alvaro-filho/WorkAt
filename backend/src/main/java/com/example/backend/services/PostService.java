@@ -22,6 +22,8 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -322,12 +324,61 @@ public class PostService {
 
     @Transactional
     public void deleteAllForTask(Task task) {
-        removePosts(postRepository.findByTask(task));
+        removePosts(keepStandalonePosts(postRepository.findByTask(task), task.getProject()));
     }
 
     @Transactional
     public void deleteAllForProject(Project project) {
-        removePosts(postRepository.findByProject(project));
+        removePosts(keepStandalonePosts(postRepository.findByProject(project), project));
+    }
+
+    /**
+     * Quando o projeto (ou a tarefa) some, os posts que o artista publicou ficam no portfólio dele:
+     * as imagens viram cópias próprias do post e o post se desliga do projeto. WIPs e avisos somem.
+     * Com NDA ativo nada é preservado (o post desligado viraria público). Devolve o que deve ser apagado.
+     */
+    private List<Post> keepStandalonePosts(List<Post> posts, Project project) {
+        boolean nda = ndaBlocks(project);
+        List<Post> remove = new ArrayList<>();
+        for (Post post : posts) {
+            if (post.getKind() != PostKind.STANDALONE || nda || !preserve(post)) {
+                remove.add(post);
+            }
+        }
+        return remove;
+    }
+
+    /** Copia as imagens que ainda apontam para arquivos da tarefa; false se nada sobrou. */
+    private boolean preserve(Post post) {
+        for (PostImage image : new ArrayList<>(post.getImages())) {
+            TaskFile file = image.getTaskFile();
+            if (file == null) {
+                continue;
+            }
+            Resource content = storage.load(file.getStoredName()).orElse(null);
+            if (content == null) {
+                post.getImages().remove(image);
+                continue;
+            }
+            String stored = file.getStoredName();
+            String extension = stored.contains(".") ? stored.substring(stored.lastIndexOf('.') + 1) : "bin";
+            try (InputStream input = content.getInputStream()) {
+                image.setStoredName(storage.save(input, extension));
+            } catch (IOException exception) {
+                post.getImages().remove(image);
+                continue;
+            }
+            image.setContentType(file.getContentType());
+            image.setSizeBytes(file.getSizeBytes());
+            image.setTaskFile(null);
+        }
+        if (post.getImages().isEmpty()) {
+            return false;
+        }
+        post.setProject(null);
+        post.setTask(null);
+        postRepository.save(post);
+        return true;
     }
 
     // ---- Apoio ----

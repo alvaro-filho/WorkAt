@@ -97,10 +97,35 @@ class ProjectMembershipServiceTest {
 
     @Test
     void duplicatePendingInvitationReturns409() {
-        when(invitationRepository.existsByProjectAndInvitedUserAndStatus(project, friend, InvitationStatus.PENDING))
-                .thenReturn(true);
+        ProjectInvitation pending = new ProjectInvitation();
+        pending.setProject(project);
+        pending.setInvitedUser(friend);
+        pending.setStatus(InvitationStatus.PENDING);
+        when(invitationRepository.findByProjectAndStatusOrderByCreatedAtDesc(project, InvitationStatus.PENDING))
+                .thenReturn(List.of(pending));
 
         assertEquals(409, statusOf(() -> service.invite(60L, owner, "amigo@test.test")));
+    }
+
+    @Test
+    void expiredInvitationCannotBeAcceptedAndIsMarkedExpired() {
+        ProjectInvitation invitation = pendingInvitation();
+        invitation.setCreatedAt(java.time.LocalDateTime.now().minusDays(ProjectMembershipService.INVITE_TTL_DAYS + 1));
+
+        assertEquals(410, statusOf(() -> service.accept(90L, friend)));
+        assertEquals(InvitationStatus.EXPIRED, invitation.getStatus());
+        verify(memberRepository, never()).save(any());
+    }
+
+    @Test
+    void ownerCancelsPendingInvitation() {
+        ProjectInvitation invitation = pendingInvitation();
+        when(invitationRepository.findById(90L)).thenReturn(java.util.Optional.of(invitation));
+
+        service.cancelInvitation(60L, 90L, owner);
+
+        assertEquals(InvitationStatus.CANCELLED, invitation.getStatus());
+        assertEquals(410, statusOf(() -> service.accept(90L, friend)));
     }
 
     @Test

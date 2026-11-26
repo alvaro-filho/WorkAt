@@ -12,10 +12,15 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as PublicRouteImport } from './routes/_public'
+import { Route as EsqueciSenhaRouteImport } from './routes/esqueci-senha'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as AuthenticatedCanvasRouteImport } from './routes/_authenticated/canvas'
+import { Route as AuthenticatedContaRouteImport } from './routes/_authenticated/conta'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedKanbanRouteImport } from './routes/_authenticated/kanban'
+import { Route as AuthenticatedMinhasTarefasRouteImport } from './routes/_authenticated/minhas-tarefas'
+import { Route as AuthenticatedNotificacoesRouteImport } from './routes/_authenticated/notificacoes'
 import { Route as AuthenticatedShowcaseRouteImport } from './routes/_authenticated/showcase'
 import { Route as PublicExplorarRouteImport } from './routes/_public/explorar'
 import { Route as PublicPublicacoesRouteImport } from './routes/_public/publicacoes'
@@ -38,14 +43,29 @@ const PublicRoute = PublicRouteImport.update({
   id: '/_public',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EsqueciSenhaRoute = EsqueciSenhaRouteImport.update({
+  id: '/esqueci-senha',
+  path: '/esqueci-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
+  id: '/redefinir-senha',
+  path: '/redefinir-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedCanvasRoute = AuthenticatedCanvasRouteImport.update({
   id: '/canvas',
   path: '/canvas',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedContaRoute = AuthenticatedContaRouteImport.update({
+  id: '/conta',
+  path: '/conta',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
@@ -58,6 +78,18 @@ const AuthenticatedKanbanRoute = AuthenticatedKanbanRouteImport.update({
   path: '/kanban',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedMinhasTarefasRoute =
+  AuthenticatedMinhasTarefasRouteImport.update({
+    id: '/minhas-tarefas',
+    path: '/minhas-tarefas',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedNotificacoesRoute =
+  AuthenticatedNotificacoesRouteImport.update({
+    id: '/notificacoes',
+    path: '/notificacoes',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedShowcaseRoute = AuthenticatedShowcaseRouteImport.update({
   id: '/showcase',
   path: '/showcase',
@@ -105,10 +137,15 @@ const AuthenticatedProjetosProjectIdTarefasTaskIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/canvas': typeof AuthenticatedCanvasRoute
+  '/conta': typeof AuthenticatedContaRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/kanban': typeof AuthenticatedKanbanRoute
+  '/minhas-tarefas': typeof AuthenticatedMinhasTarefasRoute
+  '/notificacoes': typeof AuthenticatedNotificacoesRoute
   '/showcase': typeof AuthenticatedShowcaseRoute
   '/explorar': typeof PublicExplorarRoute
   '/publicacoes': typeof PublicPublicacoesRoute
@@ -120,10 +157,15 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/canvas': typeof AuthenticatedCanvasRoute
+  '/conta': typeof AuthenticatedContaRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/kanban': typeof AuthenticatedKanbanRoute
+  '/minhas-tarefas': typeof AuthenticatedMinhasTarefasRoute
+  '/notificacoes': typeof AuthenticatedNotificacoesRoute
   '/showcase': typeof AuthenticatedShowcaseRoute
   '/explorar': typeof PublicExplorarRoute
   '/publicacoes': typeof PublicPublicacoesRoute
@@ -138,10 +180,15 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/_public': typeof PublicRouteWithChildren
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/login': typeof LoginRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/_authenticated/canvas': typeof AuthenticatedCanvasRoute
+  '/_authenticated/conta': typeof AuthenticatedContaRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/kanban': typeof AuthenticatedKanbanRoute
+  '/_authenticated/minhas-tarefas': typeof AuthenticatedMinhasTarefasRoute
+  '/_authenticated/notificacoes': typeof AuthenticatedNotificacoesRoute
   '/_authenticated/showcase': typeof AuthenticatedShowcaseRoute
   '/_public/explorar': typeof PublicExplorarRoute
   '/_public/publicacoes': typeof PublicPublicacoesRoute
@@ -155,10 +202,15 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/esqueci-senha'
     | '/login'
+    | '/redefinir-senha'
     | '/canvas'
+    | '/conta'
     | '/dashboard'
     | '/kanban'
+    | '/minhas-tarefas'
+    | '/notificacoes'
     | '/showcase'
     | '/explorar'
     | '/publicacoes'
@@ -170,10 +222,15 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/esqueci-senha'
     | '/login'
+    | '/redefinir-senha'
     | '/canvas'
+    | '/conta'
     | '/dashboard'
     | '/kanban'
+    | '/minhas-tarefas'
+    | '/notificacoes'
     | '/showcase'
     | '/explorar'
     | '/publicacoes'
@@ -187,10 +244,15 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/_public'
+    | '/esqueci-senha'
     | '/login'
+    | '/redefinir-senha'
     | '/_authenticated/canvas'
+    | '/_authenticated/conta'
     | '/_authenticated/dashboard'
     | '/_authenticated/kanban'
+    | '/_authenticated/minhas-tarefas'
+    | '/_authenticated/notificacoes'
     | '/_authenticated/showcase'
     | '/_public/explorar'
     | '/_public/publicacoes'
@@ -205,7 +267,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   PublicRoute: typeof PublicRouteWithChildren
+  EsqueciSenhaRoute: typeof EsqueciSenhaRoute
   LoginRoute: typeof LoginRoute
+  RedefinirSenhaRoute: typeof RedefinirSenhaRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -231,6 +295,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/esqueci-senha': {
+      id: '/esqueci-senha'
+      path: '/esqueci-senha'
+      fullPath: '/esqueci-senha'
+      preLoaderRoute: typeof EsqueciSenhaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -238,11 +309,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/redefinir-senha': {
+      id: '/redefinir-senha'
+      path: '/redefinir-senha'
+      fullPath: '/redefinir-senha'
+      preLoaderRoute: typeof RedefinirSenhaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/canvas': {
       id: '/_authenticated/canvas'
       path: '/canvas'
       fullPath: '/canvas'
       preLoaderRoute: typeof AuthenticatedCanvasRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/conta': {
+      id: '/_authenticated/conta'
+      path: '/conta'
+      fullPath: '/conta'
+      preLoaderRoute: typeof AuthenticatedContaRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/dashboard': {
@@ -257,6 +342,20 @@ declare module '@tanstack/react-router' {
       path: '/kanban'
       fullPath: '/kanban'
       preLoaderRoute: typeof AuthenticatedKanbanRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/minhas-tarefas': {
+      id: '/_authenticated/minhas-tarefas'
+      path: '/minhas-tarefas'
+      fullPath: '/minhas-tarefas'
+      preLoaderRoute: typeof AuthenticatedMinhasTarefasRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/notificacoes': {
+      id: '/_authenticated/notificacoes'
+      path: '/notificacoes'
+      fullPath: '/notificacoes'
+      preLoaderRoute: typeof AuthenticatedNotificacoesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/showcase': {
@@ -320,8 +419,11 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteChildren {
   AuthenticatedCanvasRoute: typeof AuthenticatedCanvasRoute
+  AuthenticatedContaRoute: typeof AuthenticatedContaRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedKanbanRoute: typeof AuthenticatedKanbanRoute
+  AuthenticatedMinhasTarefasRoute: typeof AuthenticatedMinhasTarefasRoute
+  AuthenticatedNotificacoesRoute: typeof AuthenticatedNotificacoesRoute
   AuthenticatedShowcaseRoute: typeof AuthenticatedShowcaseRoute
   AuthenticatedProjetosProjectIdRoute: typeof AuthenticatedProjetosProjectIdRoute
   AuthenticatedProjetosIndexRoute: typeof AuthenticatedProjetosIndexRoute
@@ -330,8 +432,11 @@ interface AuthenticatedRouteChildren {
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCanvasRoute: AuthenticatedCanvasRoute,
+  AuthenticatedContaRoute: AuthenticatedContaRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedKanbanRoute: AuthenticatedKanbanRoute,
+  AuthenticatedMinhasTarefasRoute: AuthenticatedMinhasTarefasRoute,
+  AuthenticatedNotificacoesRoute: AuthenticatedNotificacoesRoute,
   AuthenticatedShowcaseRoute: AuthenticatedShowcaseRoute,
   AuthenticatedProjetosProjectIdRoute: AuthenticatedProjetosProjectIdRoute,
   AuthenticatedProjetosIndexRoute: AuthenticatedProjetosIndexRoute,
@@ -364,7 +469,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   PublicRoute: PublicRouteWithChildren,
+  EsqueciSenhaRoute: EsqueciSenhaRoute,
   LoginRoute: LoginRoute,
+  RedefinirSenhaRoute: RedefinirSenhaRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

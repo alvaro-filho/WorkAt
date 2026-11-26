@@ -15,6 +15,16 @@ public class ProjectCreateRequest {
     private String slug;
     private String description;
     private ProjectType type;
+    /** Modelo opcional: cria as tarefas iniciais (ver /api/v1/project-templates). */
+    private String template;
+
+    public String getTemplate() {
+        return template;
+    }
+
+    public void setTemplate(String template) {
+        this.template = template;
+    }
 
     public Project toNewProject() {
         Project project = new Project();

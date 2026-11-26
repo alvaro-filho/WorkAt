@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, GripVertical, Plus } from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, CalendarClock, GripVertical, Plus } from "lucide-react";
 
+import { UserAvatar } from "@/components/posts/PostCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { ApiPriority, ApiTask, ApiTaskStatus } from "@/lib/api";
+import { isOverdue } from "@/lib/dates";
 
 type TaskStatus = "todo" | "progress" | "review" | "done";
 const COLUMNS: { id: TaskStatus; label: string }[] = [
@@ -43,6 +52,7 @@ export function KanbanBoard({
   closed,
   canManageTasks,
   canMoveTask,
+  canFinishTask = () => true,
   assigneeOptions = [],
   readOnlyHint,
   onCreateTask,
@@ -57,6 +67,8 @@ export function KanbanBoard({
   canManageTasks: boolean;
   /** Se o usuário pode arrastar esta tarefa (no corporativo, o contratado só move as dele). */
   canMoveTask: (task: ApiTask) => boolean;
+  /** Se o usuário pode levar a tarefa para Concluído (no corporativo, só o dono, ao aprovar). */
+  canFinishTask?: (task: ApiTask) => boolean;
   /** Participantes que podem ser responsáveis por uma tarefa (vazio = sem campo de responsável). */
   assigneeOptions?: { id: number; fullName: string }[];
   /** Explica por que o usuário não pode mexer no quadro (ex.: contratado no corporativo). */
@@ -89,6 +101,10 @@ export function KanbanBoard({
   const move = async (id: number, status: TaskStatus) => {
     const task = localTasks.find((item) => item.id === id);
     if (!task || !canDrag(task) || toUiStatus[task.status] === status) return;
+    if (status === "done" && !canFinishTask(task)) {
+      setFormError("Envie para Em Revisão: no corporativo, o dono conclui ao aprovar.");
+      return;
+    }
     const previous = localTasks;
     setLocalTasks((items) =>
       items.map((item) => (item.id === id ? { ...item, status: toApiStatus[status] } : item)),
@@ -143,7 +159,7 @@ export function KanbanBoard({
             </p>
           ) : (
             <p className="mr-auto text-sm text-muted-foreground">
-              Arraste os cartões entre as colunas para atualizar o status.
+              Arraste os cartões entre as colunas ou use o botão de mover em cada cartão.
             </p>
           )}
           {canManageTasks && !closed && (
@@ -285,20 +301,53 @@ export function KanbanBoard({
                         onDragStart={() => draggable && setDragging(task.id)}
                         onDragEnd={() => setDragging(null)}
                         onClick={() => onOpenTask(task)}
-                        className={`glass glass-hover cursor-pointer rounded-xl p-3 ${dragging === task.id ? "opacity-50" : ""}`}
+                        className={`glass glass-hover cursor-pointer rounded-xl p-3 ${dragging === task.id ? "opacity-50" : ""} ${isOverdue(task.deadline, task.status) ? "border-destructive/50" : ""}`}
                       >
                         <div className="flex items-start gap-2">
                           {draggable && (
-                            <GripVertical className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                            <GripVertical className="mt-0.5 hidden size-4 shrink-0 text-muted-foreground sm:block" />
                           )}
-                          <p className="min-w-0 text-sm font-medium">{task.title}</p>
+                          <p className="min-w-0 flex-1 text-sm font-medium break-words">{task.title}</p>
+                          {draggable && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label={`Mover ${task.title}`}
+                                  title="Mover para..."
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="-mt-1 -mr-1 rounded-md p-1 text-muted-foreground hover:bg-white/10 hover:text-foreground"
+                                >
+                                  <ArrowRightLeft className="size-4" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                <DropdownMenuLabel>Mover para</DropdownMenuLabel>
+                                {COLUMNS.filter((c) => c.id !== col.id).map((target) => {
+                                  const blocked = target.id === "done" && !canFinishTask(task);
+                                  return (
+                                    <DropdownMenuItem
+                                      key={target.id}
+                                      disabled={blocked}
+                                      onSelect={() => void move(task.id, target.id)}
+                                    >
+                                      {target.label}
+                                      {blocked && (
+                                        <span className="ml-2 text-xs text-muted-foreground">(o dono aprova)</span>
+                                      )}
+                                    </DropdownMenuItem>
+                                  );
+                                })}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </div>
                         {task.description && (
                           <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
                             {task.description}
                           </p>
                         )}
-                        <div className="mt-3 flex items-center justify-between gap-2">
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                           <Badge
                             variant="outline"
                             className={
@@ -311,19 +360,21 @@ export function KanbanBoard({
                           >
                             {priorities[task.priority]}
                           </Badge>
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <CalendarClock className="size-3" />
-                            {formatDeadline(task.deadline)}
-                          </span>
+                          {isOverdue(task.deadline, task.status) ? (
+                            <span className="flex items-center gap-1 text-xs font-medium whitespace-nowrap text-destructive">
+                              <AlertTriangle className="size-3" />
+                              Atrasada · {formatDeadline(task.deadline)}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground">
+                              <CalendarClock className="size-3" />
+                              {formatDeadline(task.deadline)}
+                            </span>
+                          )}
                         </div>
                         {task.assignee && (
                           <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                            <span
-                              aria-hidden="true"
-                              className="flex size-5 items-center justify-center rounded-full bg-white/10 text-[10px] font-semibold text-foreground"
-                            >
-                              {task.assignee.fullName.slice(0, 1).toUpperCase()}
-                            </span>
+                            <UserAvatar name={task.assignee.fullName} src={task.assignee.avatarUrl} size="xs" />
                             <span className="truncate">{task.assignee.fullName}</span>
                           </div>
                         )}

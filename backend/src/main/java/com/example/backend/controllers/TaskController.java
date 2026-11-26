@@ -45,6 +45,24 @@ public class TaskController {
         return ResponseEntity.ok(response);
     }
 
+    /** Minhas tarefas: abertas, atribuídas a mim, em todos os projetos ativos. */
+    @GetMapping("/api/v1/me/tasks")
+    public List<TaskResponse> myTasks(Authentication authentication) {
+        return taskService.myOpenTasks(findAuthenticatedUser(authentication)).stream().map(TaskResponse::from).toList();
+    }
+
+    public record ReviewRequest(TaskService.ReviewDecision decision, String note) {
+    }
+
+    /** Revisão do dono: APPROVE conclui; REQUEST_CHANGES devolve para Em Progresso com o motivo. */
+    @PostMapping("/api/v1/tasks/{taskId}/review")
+    public TaskResponse review(@PathVariable Long taskId, @RequestBody ReviewRequest request,
+                               Authentication authentication) {
+        User user = findAuthenticatedUser(authentication);
+        return TaskResponse.from(taskService.review(taskId, user,
+                request == null ? null : request.decision(), request == null ? null : request.note()));
+    }
+
     @GetMapping("/api/v1/tasks/{taskId}")
     public ResponseEntity<TaskResponse> getTask(@PathVariable Long taskId, Authentication authentication) {
         User user = findAuthenticatedUser(authentication);

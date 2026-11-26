@@ -175,4 +175,77 @@ class TaskServiceTest {
         assertTrue(exception.getReason().contains("O título é obrigatório."));
         verifyNoInteractions(projectRepository, taskRepository);
     }
+
+    // ---- Revisão no corporativo ----
+
+    private Task corporateTaskFor(User contractor, TaskStatus status) {
+        project.setType(com.example.backend.models.ProjectType.CORPORATE);
+        contractor.setId(2L);
+        creator.setId(1L);
+        Task task = new Task();
+        task.setId(40L);
+        task.setTitle("Concept");
+        task.setProject(project);
+        task.setAssignee(contractor);
+        task.setStatus(status);
+        when(taskRepository.findById(40L)).thenReturn(Optional.of(task));
+        when(memberRepository.existsByProjectAndUser(project, contractor)).thenReturn(true);
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        return task;
+    }
+
+    @Test
+    void contractorCannotMarkCorporateTaskDone() {
+        User contractor = new User();
+        corporateTaskFor(contractor, TaskStatus.REVIEW);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> taskService.updateStatus(40L, contractor, TaskStatus.DONE));
+        assertEquals(403, error.getStatusCode().value());
+    }
+
+    @Test
+    void contractorSendsToReviewAndOwnerApproves() {
+        User contractor = new User();
+        Task task = corporateTaskFor(contractor, TaskStatus.IN_PROGRESS);
+
+        taskService.updateStatus(40L, contractor, TaskStatus.REVIEW);
+        assertEquals(TaskStatus.REVIEW, task.getStatus());
+
+        taskService.review(40L, creator, TaskService.ReviewDecision.APPROVE, null);
+        assertEquals(TaskStatus.DONE, task.getStatus());
+    }
+
+    @Test
+    void requestingChangesNeedsAReasonAndReturnsTaskToInProgress() {
+        User contractor = new User();
+        Task task = corporateTaskFor(contractor, TaskStatus.REVIEW);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> taskService.review(40L, creator, TaskService.ReviewDecision.REQUEST_CHANGES, "  "));
+        assertEquals(400, error.getStatusCode().value());
+
+        taskService.review(40L, creator, TaskService.ReviewDecision.REQUEST_CHANGES, "Aumentar o contraste");
+        assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
+    }
+
+    @Test
+    void onlyTheOwnerReviews() {
+        User contractor = new User();
+        corporateTaskFor(contractor, TaskStatus.REVIEW);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> taskService.review(40L, contractor, TaskService.ReviewDecision.APPROVE, null));
+        assertEquals(403, error.getStatusCode().value());
+    }
+
+    @Test
+    void reviewOnlyWhileInReview() {
+        User contractor = new User();
+        corporateTaskFor(contractor, TaskStatus.IN_PROGRESS);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> taskService.review(40L, creator, TaskService.ReviewDecision.APPROVE, null));
+        assertEquals(409, error.getStatusCode().value());
+    }
 }

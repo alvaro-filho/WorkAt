@@ -49,7 +49,7 @@ public class ProfileService {
 
     @Transactional(readOnly = true)
     public ProfileResponse profile(String username, User viewer) {
-        User owner = userRepository.findByUsername(username)
+        User owner = userRepository.findByUsername(username).filter(found -> !found.isDeleted())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Perfil não encontrado."));
         boolean me = ProjectAccessService.sameUser(owner, viewer);
 
@@ -86,6 +86,7 @@ public class ProfileService {
         List<HeatmapDTO> heatmap = activityEventService.getHeatmap(owner.getId());
 
         return new ProfileResponse(UserSummary.from(owner), me, owner.getCreatedAt(), portfolio, posts, projects,
-                hiddenPersonal, heatmap);
+                hiddenPersonal, heatmap, owner.getBio(), ProfileResponse.split(owner.getSpecialties(), ","),
+                ProfileResponse.split(owner.getLinks(), "\n"));
     }
 }

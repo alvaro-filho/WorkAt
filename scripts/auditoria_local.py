@@ -11,7 +11,7 @@ Uso (backend rodando em localhost:8080, banco de TESTE):
 Pode rodar de novo: os usuários são reaproveitados e os projetos ganham um sufixo novo.
 Senha dos usuários de teste (só para o banco local): AUDIT_PASSWORD abaixo.
 """
-import json, secrets, struct, sys, urllib.error, urllib.request, uuid, zlib
+import json, os, re, secrets, struct, sys, urllib.error, urllib.request, uuid, zlib
 from datetime import date, timedelta
 
 BASE = "http://localhost:8080/api/v1"
@@ -246,9 +246,17 @@ s, _, _ = call("GET", f"/tasks/{t_caio['id']}", tb)
 check("bia não abre tarefa do caio", s, 404)
 s, _, _ = call("POST", f"/projects/{corp['id']}/tasks", tb, {"title": "x", "priority": "LOW"})
 check("contratado não cria tarefa no corporativo", s, 403)
-for st in ("IN_PROGRESS", "REVIEW", "DONE", "TODO"):
+for st in ("IN_PROGRESS", "REVIEW"):
     s, t, _ = call("PATCH", f"/tasks/{t_bia['id']}/status", tb, {"status": st})
     check(f"bia move a própria tarefa para {st}", (s, (t or {}).get("status")), (200, st))
+s, _, _ = call("PATCH", f"/tasks/{t_bia['id']}/status", tb, {"status": "DONE"})
+check("contratada não conclui sozinha (o dono aprova)", s, 403)
+s, t, _ = call("POST", f"/tasks/{t_bia['id']}/review", ta, {"decision": "APPROVE"})
+check("empresa aprova e a tarefa conclui", (s, (t or {}).get("status")), (200, "DONE"))
+s, _, _ = call("PATCH", f"/tasks/{t_bia['id']}/status", tb, {"status": "TODO"})
+check("contratada não reabre tarefa aprovada", s, 403)
+s, t, _ = call("PATCH", f"/tasks/{t_bia['id']}/status", ta, {"status": "TODO"})
+check("dono reabre a tarefa", (s, (t or {}).get("status")), (200, "TODO"))
 s, _, _ = call("PATCH", f"/tasks/{t_bia['id']}/status", tb, {"status": "ARQUIVADA"})
 check("status inválido é recusado", s, 400)
 s, _, _ = call("PATCH", f"/tasks/{t_caio['id']}/status", tb, {"status": "DONE"})
@@ -287,8 +295,8 @@ s, f2, _ = upload(tb, t_bia["id"], "heroina.png", png(200, 60, 160), final=True)
 check("bia envia PNG como imagem final", (s, (f2 or {}).get("finalImage") if isinstance(f2, dict) else f2),
       (201, True))
 s, f3, _ = upload(tb, t_bia["id"], "heroina.png", png(180, 40, 200))
-check("cada envio na tarefa ganha a próxima versão", (s, (f3 or {}).get("version") if isinstance(f3, dict) else f3),
-      (201, 3))
+check("reenviar o mesmo arquivo vira v2 (versão por arquivo)",
+      (s, (f3 or {}).get("version") if isinstance(f3, dict) else f3), (201, 2))
 s, _, _ = upload(tb, t_bia["id"], "virus.exe", b"MZ")
 check("recusa .exe", s, 415)
 s, _, _ = upload(tb, t_caio["id"], "a.png", png())
@@ -467,6 +475,155 @@ s, _, _ = call("DELETE", f"/projects/{camp['id']}", ta)
 check("empresa apaga a Campanha encerrada", s, 204)
 s, _, _ = call("GET", f"/tasks/{tx['id']}", ta)
 check("tarefas do projeto apagado somem", s, 404)
+
+# ------------------------------------------------------------------ 11. Melhorias
+sec("11. Revisão, conversa, avisos, histórico, modelos e conta")
+s, n, _ = call("GET", "/notifications", tb)
+check("bia recebeu aviso da tarefa atribuída", any(x["type"] == "TASK_ASSIGNED" for x in (n or {}).get("items", [])), True)
+check("contador de não lidos", (n or {}).get("unread", 0) > 0, True)
+
+call("PATCH", f"/tasks/{t_bia['id']}/status", tb, {"status": "IN_PROGRESS"})
+s, t, _ = call("PATCH", f"/tasks/{t_bia['id']}/status", tb, {"status": "REVIEW"})
+check("bia envia para revisão", (s, (t or {}).get("status")), (200, "REVIEW"))
+s, n, _ = call("GET", "/notifications", ta)
+check("empresa é avisada da revisão", any(x["type"] == "REVIEW_REQUESTED" for x in n["items"]), True)
+s, _, _ = call("POST", f"/tasks/{t_bia['id']}/review", tb, {"decision": "APPROVE"})
+check("contratada não revisa", s, 403)
+s, _, _ = call("POST", f"/tasks/{t_bia['id']}/review", ta, {"decision": "REQUEST_CHANGES", "note": " "})
+check("pedir ajuste exige motivo", s, 400)
+s, t, _ = call("POST", f"/tasks/{t_bia['id']}/review", ta, {"decision": "REQUEST_CHANGES", "note": "Aumentar o contraste"})
+check("ajuste devolve para Em Progresso", (s, (t or {}).get("status")), (200, "IN_PROGRESS"))
+s, cm, _ = call("GET", f"/tasks/{t_bia['id']}/comments", tb)
+check("pedido de ajuste fica na conversa", ([c["kind"] for c in cm][-1], cm[-1]["body"]) if s == 200 and cm else s,
+      ("CHANGES_REQUESTED", "Aumentar o contraste"))
+s, n, _ = call("GET", "/notifications", tb)
+check("bia é avisada do ajuste", any(x["type"] == "CHANGES_REQUESTED" and "contraste" in x["message"] for x in n["items"]), True)
+call("PATCH", f"/tasks/{t_bia['id']}/status", tb, {"status": "REVIEW"})
+s, t, _ = call("POST", f"/tasks/{t_bia['id']}/review", ta, {"decision": "APPROVE"})
+check("empresa aprova", (s, (t or {}).get("status")), (200, "DONE"))
+s, _, _ = call("POST", f"/tasks/{t_bia['id']}/review", ta, {"decision": "APPROVE"})
+check("revisar fora de Em Revisão", s, 409)
+
+s, c1, _ = call("POST", f"/tasks/{t_bia['id']}/comments", tb, {"body": "Ajustei o contraste na v2", "fileId": f3["id"]})
+check("bia comenta sobre uma versão", (s, (c1 or {}).get("fileVersion")), (201, 2))
+s, _, _ = call("POST", f"/tasks/{t_bia['id']}/comments", tb, {"body": "x", "fileId": fcaio["id"]})
+check("versão de outra tarefa é recusada", s, 400)
+s, _, _ = call("POST", f"/tasks/{t_caio['id']}/comments", tb, {"body": "oi"})
+check("não comenta em tarefa que não vê", s, 404)
+s, _, _ = call("POST", f"/tasks/{t_bia['id']}/comments", tb, {"body": "   "})
+check("comentário vazio é recusado", s, 400)
+s, n, _ = call("GET", "/notifications", ta)
+check("empresa é avisada do comentário", any(x["type"] == "COMMENT_ADDED" for x in n["items"]), True)
+s, _, _ = call("DELETE", f"/comments/{c1['id']}", tc)
+check("outra pessoa não apaga o comentário", s in (403, 404), True, f"status {s}")
+s, _, _ = call("DELETE", f"/comments/{c1['id']}", tb)
+check("autora apaga o próprio comentário", s, 204)
+s, _, _ = call("POST", "/notifications/read-all", tb)
+s2, n, _ = call("GET", "/notifications/unread-count", tb)
+check("marcar todas como lidas", (s, (n or {}).get("unread")), (204, 0))
+
+s, mt, _ = call("GET", "/me/tasks", tc)
+check("minhas tarefas do caio", [(x["title"], x["projectName"]) for x in mt] if s == 200 else s,
+      [("Cenário da floresta", "Jogo Aurora")])
+s, mt, _ = call("GET", "/me/tasks", tb)
+check("tarefa aprovada sai de minhas tarefas", any(x["id"] == t_bia["id"] for x in mt), False)
+
+s, hist, _ = call("GET", f"/projects/{corp['id']}/history", ta)
+check("histórico registra as ações", s == 200 and any("aprovou" in h["message"] for h in hist), True)
+s, hist_b, _ = call("GET", f"/projects/{corp['id']}/history", tb)
+check("contratada não vê histórico de tarefa alheia", any(h.get("taskId") == t_caio["id"] for h in hist_b), False)
+
+s, inv, _ = call("POST", f"/projects/{corp['id']}/invitations", ta, {"email": ue["email"]})
+s2, _, _ = call("DELETE", f"/projects/{corp['id']}/invitations/{inv['id']}", ta)
+check("empresa cancela convite", (s, s2), (201, 204))
+s, _, _ = call("POST", f"/invitations/{inv['id']}/accept", te)
+check("convite cancelado não pode ser aceito", s, 410)
+
+s, _, _ = call("POST", f"/projects/{coop['id']}/transfer", te, {"userId": ub["id"]})
+check("não passa o projeto para quem não é membro", s, 400)
+s, pr, _ = call("POST", f"/projects/{coop['id']}/transfer", te, {"userId": uf["id"]})
+check("eva passa o cooperativo para fabio", (s, (pr or {}).get("myRole")), (200, "MEMBER"))
+s, pr, _ = call("GET", f"/projects/{coop['id']}", tf)
+check("fabio agora é dono", (pr or {}).get("myRole"), "OWNER")
+s, _, _ = call("POST", f"/projects/{coop['id']}/leave", te)
+check("eva pode sair depois de passar", s, 204)
+
+s, z, _ = call("GET", f"/projects/{corp['id']}/finals.zip", ta)
+check("baixa o .zip das finais", (s, z[:2] if isinstance(z, bytes) else None), (200, b"PK"))
+s, _, _ = call("GET", f"/projects/{corp['id']}/finals.zip", te)
+check("quem é de fora não baixa o .zip", s, 404)
+
+s, tpl, _ = call("GET", "/project-templates", tf)
+check("lista de modelos", len(tpl) if s == 200 else s, 3)
+s, pt, _ = call("POST", "/projects", tf, {"name": "Ilustração teste", "slug": f"ilu-{sfx}", "template": "ilustracao"})
+s2, tt, _ = call("GET", f"/projects/{pt['id']}/tasks", tf)
+check("projeto com modelo nasce com as tarefas", (s, len(tt) if s2 == 200 else s2), (201, 4))
+s, _, _ = call("POST", "/projects", tf, {"name": "X", "slug": f"x-{sfx}", "template": "nao-existe"})
+check("modelo desconhecido é recusado", s, 400)
+
+call("PATCH", f"/projects/{pess['id']}/status", tf, {"status": "CLOSED"})
+s, _, _ = call("DELETE", f"/projects/{pess['id']}", tf)
+s2, pp, _ = call("GET", f"/posts/{post_pess['id']}", tf)
+check("apagar o projeto mantém o post do autor", (s, s2, (pp or {}).get("project")), (204, 200, None))
+if s2 == 200 and pp.get("images"):
+    s3, img, _ = call("GET", api_path(pp["images"][0]["url"]))
+    check("imagem do post preservado continua", (s3, img[1:4] if isinstance(img, bytes) else None), (200, b"PNG"))
+
+s, acc, _ = call("PATCH", "/me/profile", tb, {"bio": "Concept artist", "specialties": ["Personagens", "Cor"],
+                                              "links": ["https://www.artstation.com/bia"]})
+check("bia edita o perfil", (s, (acc or {}).get("specialties")), (200, ["Personagens", "Cor"]))
+s, _, _ = call("PATCH", "/me/profile", tb, {"links": ["javascript:alert(1)"]})
+check("link inválido é recusado", s, 400)
+bnd = uuid.uuid4().hex
+raw = (f"--{bnd}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"foto.png\"\r\n"
+       f"Content-Type: image/png\r\n\r\n").encode() + png(240, 180, 60) + f"\r\n--{bnd}--\r\n".encode()
+s, acc, _ = call("POST", "/me/avatar", tb, raw=raw, ctype=f"multipart/form-data; boundary={bnd}")
+check("bia envia foto", (s, bool((acc or {}).get("avatarUrl"))), (200, True))
+s, pf, _ = call("GET", "/users/bia/profile")
+check("perfil público mostra bio e foto", (pf.get("bio"), bool(pf["user"].get("avatarUrl"))), ("Concept artist", True))
+s, img, _ = call("GET", api_path(pf["user"]["avatarUrl"]))
+check("foto pública sem login", (s, img[1:4] if isinstance(img, bytes) else None), (200, b"PNG"))
+
+s, _, _ = call("POST", "/me/password", tc, {"currentPassword": "errada", "newPassword": "Nova#Senha123"})
+check("trocar senha exige a atual", s, 400)
+s, _, _ = call("POST", "/me/password", tc, {"currentPassword": AUDIT_PASSWORD, "newPassword": "Nova#Senha123"})
+s2, _, _ = call("POST", "/auth/login", body={"email": uc["email"], "password": "Nova#Senha123"})
+check("troca a senha e entra com a nova", (s, s2), (200, 200))
+call("POST", "/me/password", tc, {"currentPassword": "Nova#Senha123", "newPassword": AUDIT_PASSWORD})
+
+s, r, _ = call("POST", "/auth/forgot-password", body={"email": "ninguem@workat.test"})
+s2, r2, _ = call("POST", "/auth/forgot-password", body={"email": ud["email"]})
+check("esqueci a senha não revela quem tem conta", (s, s2, r == r2), (200, 200, True))
+log = os.environ.get("WORKAT_BACKEND_LOG")
+token = None
+if log and os.path.exists(log):
+    found = re.findall(r"redefinir-senha\?token=([A-Za-z0-9_-]+)", open(log, encoding="utf-8", errors="ignore").read())
+    token = found[-1] if found else None
+if token:
+    s, _, _ = call("POST", "/auth/reset-password", body={"token": token, "newPassword": "fraca"})
+    check("nova senha fraca é recusada", s, 400)
+    s, _, _ = call("POST", "/auth/reset-password", body={"token": token, "newPassword": AUDIT_PASSWORD})
+    check("redefine a senha pelo link", s, 200)
+    s, _, _ = call("POST", "/auth/reset-password", body={"token": token, "newPassword": AUDIT_PASSWORD})
+    check("link de nova senha vale uma vez", s, 400)
+else:
+    print("   (sem WORKAT_BACKEND_LOG: pulei o teste do link de nova senha)")
+
+s, ex, _ = call("GET", "/me/export", tb)
+check("exporta os dados da conta", (s, (ex or {}).get("conta", {}).get("usuario")), (200, "bia"))
+
+s, _, _ = call("POST", "/me/delete", ta, {"password": AUDIT_PASSWORD})
+check("conta com projeto que tem membros não é excluída", s, 409)
+tx_tok, tx_user = user(f"temp_{sfx}", "Conta Temporária", "ARTIST")
+call("POST", "/projects", tx_tok, {"name": "Temp", "slug": f"temp-{sfx}"})
+s, _, _ = call("POST", "/me/delete", tx_tok, {"password": "errada"})
+check("excluir conta exige a senha", s, 400)
+s, _, _ = call("POST", "/me/delete", tx_tok, {"password": AUDIT_PASSWORD})
+check("conta temporária excluída", s, 204)
+s, _, _ = call("POST", "/auth/login", body={"email": tx_user["email"], "password": AUDIT_PASSWORD})
+check("conta excluída não entra mais", s, 401)
+s, _, _ = call("GET", f"/users/temp_{sfx}/profile")
+check("perfil da conta excluída some", s, 404)
 
 # ------------------------------------------------------------------ Resumo
 fails = [r for r in results if not r[2]]

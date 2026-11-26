@@ -1,5 +1,6 @@
 package com.example.backend.services;
 
+import com.example.backend.events.WorkEvent;
 import com.example.backend.models.Project;
 import com.example.backend.models.ProjectMember;
 import com.example.backend.models.ProjectStatus;
@@ -10,6 +11,8 @@ import com.example.backend.repositories.ProjectInvitationRepository;
 import com.example.backend.repositories.ProjectMemberRepository;
 import com.example.backend.repositories.ProjectRepository;
 import com.example.backend.repositories.TaskRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +54,40 @@ public class ProjectService {
         this.access = access;
         this.taskFileService = taskFileService;
         this.postService = postService;
+    }
+
+    private ApplicationEventPublisher events;
+
+    @Autowired(required = false)
+    public void setEvents(ApplicationEventPublisher events) {
+        this.events = events;
+    }
+
+    /**
+     * O dono passa o projeto para um membro: o membro vira dono e o antigo dono continua como membro.
+     * Sem isso o dono nunca consegue sair do projeto.
+     */
+    @Transactional
+    public Project transferOwnership(Long projectId, User owner, Long newOwnerId) {
+        if (newOwnerId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Escolha para quem passar o projeto.");
+        }
+        Project project = access.requireOwner(projectId, owner);
+        ProjectMember membership = memberRepository.findByProjectOrderByJoinedAtAsc(project).stream()
+                .filter(member -> newOwnerId.equals(member.getUser().getId()))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "O novo dono precisa ser membro do projeto."));
+        User newOwner = membership.getUser();
+        memberRepository.delete(membership);
+        memberRepository.flush();
+        project.setCreatedByUser(newOwner);
+        Project saved = projectRepository.save(project);
+        memberRepository.save(new ProjectMember(saved, owner));
+        if (events != null) {
+            events.publishEvent(WorkEvent.of(WorkEvent.Type.OWNERSHIP_TRANSFERRED, saved, null, owner, newOwner, null));
+        }
+        return saved;
     }
 
     /** Projetos em que o usuário participa: os que ele criou e os em que é membro. */

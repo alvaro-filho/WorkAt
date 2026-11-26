@@ -1,12 +1,15 @@
 package com.example.backend.services;
 
+import com.example.backend.events.WorkEvent;
 import com.example.backend.models.Project;
 import com.example.backend.models.Task;
 import com.example.backend.models.TaskFile;
 import com.example.backend.models.User;
 import com.example.backend.repositories.TaskFileRepository;
 import com.example.backend.repositories.TaskRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -56,6 +59,42 @@ public class TaskFileService {
     private final PostService postService;
     private final FileStorage storage;
     private final long maxBytes;
+    /** Cota por pessoa (arquivos de tarefa + imagens próprias de posts). 0 = sem limite. */
+    private long quotaBytes = 2048L * 1024 * 1024;
+    private ApplicationEventPublisher events;
+
+    @Autowired(required = false)
+    public void setEvents(ApplicationEventPublisher events) {
+        this.events = events;
+    }
+
+    @Value("${app.storage.quota-mb-per-user:2048}")
+    public void setQuotaMb(long quotaMb) {
+        this.quotaBytes = Math.max(0, quotaMb) * 1024 * 1024;
+    }
+
+    /** Bytes já usados pela pessoa. */
+    public long usedBytes(User user) {
+        return fileRepository.totalBytesUploadedBy(user) + fileRepository.totalPostBytesOf(user);
+    }
+
+    public long quotaBytes() {
+        return quotaBytes;
+    }
+
+    /** Recusa o envio que passaria da cota da pessoa. */
+    public void ensureQuota(User user, long incomingBytes) {
+        if (quotaBytes <= 0) {
+            return;
+        }
+        long used = usedBytes(user);
+        if (used + incomingBytes > quotaBytes) {
+            long freeMb = Math.max(0, quotaBytes - used) / (1024 * 1024);
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,
+                    "Seu espaço acabou: restam " + freeMb + " MB de " + (quotaBytes / (1024 * 1024))
+                            + " MB. Apague versões antigas para liberar espaço.");
+        }
+    }
 
     public TaskFileService(ProjectAccessService access, TaskRepository taskRepository,
                            TaskFileRepository fileRepository,
@@ -105,6 +144,7 @@ public class TaskFileService {
                     "A imagem final precisa ser PNG, JPG, WEBP ou GIF.");
         }
 
+        ensureQuota(user, file.getSize());
         String storedName = UUID.randomUUID() + "." + extension;
         try {
             storage.store(storedName, file.getInputStream());
@@ -122,10 +162,15 @@ public class TaskFileService {
         taskFile.setStoredName(storedName);
         taskFile.setContentType(contentType);
         taskFile.setSizeBytes(file.getSize());
-        taskFile.setVersion((int) fileRepository.countByTask(task) + 1);
+        // A versão conta por nome de arquivo: "heroina.png" v2 continua de "heroina.png" v1.
+        taskFile.setVersion((int) fileRepository.countByTaskAndOriginalNameIgnoreCase(task, originalName) + 1);
         taskFile.setFinalImage(markAsFinal);
         TaskFile saved = fileRepository.save(taskFile);
         postService.recordWip(saved);
+        if (events != null) {
+            events.publishEvent(WorkEvent.of(WorkEvent.Type.FILE_UPLOADED, task.getProject(), task, user, null,
+                    originalName + " (v" + saved.getVersion() + ")"));
+        }
         return saved;
     }
 
