@@ -75,6 +75,23 @@ public class ProjectService {
 
     @Transactional
     public Project createProject(Project project, User creator) {
+        String name = project.getName() == null ? "" : project.getName().trim();
+        if (name.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O nome do projeto é obrigatório.");
+        }
+        if (name.length() > 255) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O nome do projeto deve ter no máximo 255 caracteres.");
+        }
+        String slug = project.getSlug() == null ? "" : project.getSlug().trim();
+        if (slug.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "O endereço (slug) do projeto é obrigatório.");
+        }
+        if (projectRepository.findBySlug(slug).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Já existe um projeto com esse endereço. Tente de novo ou mude o nome.");
+        }
+        project.setName(name);
+        project.setSlug(slug);
         project.setCreatedByUser(creator);
         return projectRepository.save(project);
     }

@@ -1,9 +1,18 @@
-import type { ApiTask } from "@/lib/api";
+import type { ApiTask, ApiTaskStatus } from "@/lib/api";
+
+const STATUS_LABEL: Record<ApiTaskStatus, string> = {
+  TODO: "A Fazer",
+  IN_PROGRESS: "Em Progresso",
+  REVIEW: "Em Revisão",
+  DONE: "Concluído",
+};
 
 export function GanttView({ tasks }: { tasks: ApiTask[] }) {
   const now = new Date();
   const startOfWeek = new Date(now);
   startOfWeek.setDate(now.getDate() - now.getDay());
+  // Meia-noite: um prazo no primeiro dia da semana também precisa aparecer.
+  startOfWeek.setHours(0, 0, 0, 0);
   const weeks = Array.from({ length: 6 }, (_, index) => {
     const week = new Date(startOfWeek);
     week.setDate(startOfWeek.getDate() + index * 7);
@@ -50,7 +59,7 @@ export function GanttView({ tasks }: { tasks: ApiTask[] }) {
                 <div key={week.toISOString()} className="h-8">
                   {position === index && (
                     <div className="flex h-8 items-center rounded-lg bg-primary/70 px-2 text-[11px] font-medium text-primary-foreground">
-                      {task.status.replace("_", " ")}
+                      {STATUS_LABEL[task.status] ?? task.status}
                     </div>
                   )}
                 </div>

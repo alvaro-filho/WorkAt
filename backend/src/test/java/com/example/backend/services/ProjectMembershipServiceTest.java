@@ -10,11 +10,13 @@ import com.example.backend.models.User;
 import com.example.backend.repositories.ProjectInvitationRepository;
 import com.example.backend.repositories.ProjectMemberRepository;
 import com.example.backend.repositories.ProjectRepository;
+import com.example.backend.repositories.TaskRepository;
 import com.example.backend.repositories.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -25,6 +27,7 @@ class ProjectMembershipServiceTest {
     private ProjectMemberRepository memberRepository;
     private ProjectInvitationRepository invitationRepository;
     private UserRepository userRepository;
+    private TaskRepository taskRepository;
     private ProjectMembershipService service;
 
     private User owner;
@@ -37,8 +40,9 @@ class ProjectMembershipServiceTest {
         memberRepository = mock(ProjectMemberRepository.class);
         invitationRepository = mock(ProjectInvitationRepository.class);
         userRepository = mock(UserRepository.class);
+        taskRepository = mock(TaskRepository.class);
         service = new ProjectMembershipService(new ProjectAccessService(projectRepository, memberRepository),
-                memberRepository, invitationRepository, userRepository);
+                memberRepository, invitationRepository, userRepository, taskRepository);
 
         owner = user(1L, "dono@test.test");
         friend = user(2L, "amigo@test.test");
@@ -148,6 +152,26 @@ class ProjectMembershipServiceTest {
         service.leave(60L, friend);
 
         verify(memberRepository).delete(membership);
+        verify(taskRepository).unassignAllInProject(project, friend);
+    }
+
+    @Test
+    void removedMemberStopsBeingAssigneeOfTheirTasks() {
+        ProjectMember membership = new ProjectMember(project, friend);
+        when(memberRepository.findByProjectOrderByJoinedAtAsc(project)).thenReturn(List.of(membership));
+
+        service.removeMember(60L, 2L, owner);
+
+        verify(memberRepository).delete(membership);
+        verify(taskRepository).unassignAllInProject(project, friend);
+    }
+
+    @Test
+    void invitesAccountRegisteredWithMixedCaseEmail() {
+        User legacy = user(3L, "Colega@Test.test");
+        when(userRepository.findAllByEmailIgnoreCase("colega@test.test")).thenReturn(List.of(legacy));
+
+        assertSame(legacy, service.invite(60L, owner, "colega@test.test").getInvitedUser());
     }
 
     @Test

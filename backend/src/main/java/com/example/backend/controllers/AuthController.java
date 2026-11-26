@@ -11,6 +11,7 @@ import com.example.backend.services.JwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import jakarta.validation.Valid;
 import java.util.Map;
 
@@ -45,6 +46,9 @@ public class AuthController {
                     "token", jwtService.generateToken(newUser),
                     "user", AuthUserResponse.from(newUser)
                 ));
+        } catch (ResponseStatusException e) {
+            // E-mail ou username já usados: 409, com a mensagem pronta para a tela.
+            return new ResponseEntity<>(e.getReason(), e.getStatusCode());
         } catch (RuntimeException e) {
             return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
         }

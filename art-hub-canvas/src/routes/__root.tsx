@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { ServerWakeNotice } from "@/components/layout/ServerWakeNotice";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
@@ -123,6 +124,7 @@ function RootComponent() {
       <AuthProvider>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
+        <ServerWakeNotice />
       </AuthProvider>
     </QueryClientProvider>
   );

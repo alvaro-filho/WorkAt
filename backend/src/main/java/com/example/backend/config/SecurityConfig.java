@@ -60,6 +60,9 @@ public class SecurityConfig {
                     // Imagem de publicação pública não exige login; o serviço confere a visibilidade e barra as outras.
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/posts/*/images/*").permitAll()
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/projects/*/public/files/*").permitAll()
+                    // Página de erro do Spring: sem isto, todo erro 500 vira 403 e o frontend desloga o usuário.
+                    .requestMatchers("/error").permitAll()
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/health").permitAll()
                     // Todas as outras requisições exigem autenticação
                     .anyRequest().authenticated()
             )
