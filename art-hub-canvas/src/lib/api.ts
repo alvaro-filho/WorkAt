@@ -156,6 +156,42 @@ export class ApiError extends Error {
 let unauthorizedHandler: (() => void) | null = null;
 let sessionVerification: Promise<void> | null = null;
 
+/**
+ * Chamadas lentas em andamento. No plano grátis o backend "dorme" sem uso e leva até 1 minuto
+ * para acordar; a tela mostra um aviso enquanto houver alguma chamada passando de SLOW_REQUEST_MS.
+ */
+const SLOW_REQUEST_MS = 4000;
+let slowRequests = 0;
+const slowListeners = new Set<() => void>();
+
+export function subscribeSlowRequests(listener: () => void) {
+  slowListeners.add(listener);
+  return () => {
+    slowListeners.delete(listener);
+  };
+}
+
+export function getSlowRequestCount() {
+  return slowRequests;
+}
+
+function setSlowRequests(next: number) {
+  slowRequests = Math.max(0, next);
+  slowListeners.forEach((listener) => listener());
+}
+
+function trackSlow<T>(promise: Promise<T>): Promise<T> {
+  let flagged = false;
+  const timer = setTimeout(() => {
+    flagged = true;
+    setSlowRequests(slowRequests + 1);
+  }, SLOW_REQUEST_MS);
+  return promise.finally(() => {
+    clearTimeout(timer);
+    if (flagged) setSlowRequests(slowRequests - 1);
+  });
+}
+
 export function setUnauthorizedHandler(handler: (() => void) | null) {
   unauthorizedHandler = handler;
 }
@@ -188,8 +224,12 @@ async function request<T>(
   const token = window.localStorage.getItem("authToken");
   if (token && options.sendAuthorization !== false) headers.set("Authorization", `Bearer ${token}`);
 
-  const response = await fetch(`/api/v1${path}`, { ...init, headers });
-  const responseText = await response.text();
+  const { response, responseText } = await trackSlow(
+    fetch(`/api/v1${path}`, { ...init, headers }).then(async (res) => ({
+      response: res,
+      responseText: await res.text(),
+    })),
+  );
   let data: unknown;
   try {
     data = responseText ? JSON.parse(responseText) : undefined;

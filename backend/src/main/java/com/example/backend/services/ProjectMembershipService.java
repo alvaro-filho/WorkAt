@@ -9,6 +9,7 @@ import com.example.backend.models.ProjectType;
 import com.example.backend.models.User;
 import com.example.backend.repositories.ProjectInvitationRepository;
 import com.example.backend.repositories.ProjectMemberRepository;
+import com.example.backend.repositories.TaskRepository;
 import com.example.backend.repositories.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Participação em projetos: convites por e-mail, aceite/recusa, remoção de membro e saída do projeto.
@@ -28,13 +30,16 @@ public class ProjectMembershipService {
     private final ProjectMemberRepository memberRepository;
     private final ProjectInvitationRepository invitationRepository;
     private final UserRepository userRepository;
+    private final TaskRepository taskRepository;
 
     public ProjectMembershipService(ProjectAccessService access, ProjectMemberRepository memberRepository,
-                                    ProjectInvitationRepository invitationRepository, UserRepository userRepository) {
+                                    ProjectInvitationRepository invitationRepository, UserRepository userRepository,
+                                    TaskRepository taskRepository) {
         this.access = access;
         this.memberRepository = memberRepository;
         this.invitationRepository = invitationRepository;
         this.userRepository = userRepository;
+        this.taskRepository = taskRepository;
     }
 
     /** Membros do projeto (sem o dono, que vem no próprio projeto). Qualquer participante pode ver. */
@@ -60,6 +65,10 @@ public class ProjectMembershipService {
 
         User invited = userRepository.findByEmail(email.trim().toLowerCase())
                 .or(() -> userRepository.findByEmail(email.trim()))
+                .or(() -> {
+                    List<User> matches = userRepository.findAllByEmailIgnoreCase(email.trim());
+                    return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
+                })
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Nenhuma conta encontrada com esse e-mail."));
 
@@ -126,6 +135,7 @@ public class ProjectMembershipService {
                     "O dono não pode sair do próprio projeto. Encerre ou apague o projeto.");
         }
         memberRepository.findByProjectAndUser(project, user).ifPresent(memberRepository::delete);
+        taskRepository.unassignAllInProject(project, user);
     }
 
     /** O dono remove um membro do projeto. */
@@ -139,6 +149,7 @@ public class ProjectMembershipService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Essa pessoa não é membro do projeto."));
         memberRepository.delete(member);
+        taskRepository.unassignAllInProject(project, member.getUser());
     }
 
     private ProjectInvitation findPending(Long invitationId, User user) {

@@ -1,0 +1,39 @@
+# Mantém o backend do Render (plano grátis) acordado: ele dorme após ~15 min sem uso
+# e a primeira visita depois disso leva até 1 minuto.
+# Chama /api/v1/health, que não usa o banco (o Neon continua podendo dormir).
+#
+# Para usar outro endereço (ex.: direto no Render), crie a variável do repositório
+# WORKAT_HEALTH_URL em Settings → Secrets and variables → Actions → Variables.
+#
+# Observações:
+# - O GitHub só roda agendamentos na branch padrão (master) e pode atrasar alguns minutos.
+# - Em repositório sem commits por 60 dias, o GitHub pausa o agendamento (reative na aba Actions).
+# - Ligado o mês inteiro, o serviço usa ~720 das 750 horas grátis do Render por mês.
+name: Manter backend acordado
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Chamar /api/v1/health
+        env:
+          HEALTH_URL: ${{ vars.WORKAT_HEALTH_URL || 'https://work-at-chi.vercel.app/api/v1/health' }}
+        run: |
+          for tentativa in 1 2 3; do
+            if curl -fsS --max-time 90 "$HEALTH_URL"; then
+              echo
+              echo "Backend acordado (tentativa $tentativa)."
+              exit 0
+            fi
+            echo "Sem resposta na tentativa $tentativa; tentando de novo em 20 s."
+            sleep 20
+          done
+          echo "::warning::O backend não respondeu em $HEALTH_URL"
