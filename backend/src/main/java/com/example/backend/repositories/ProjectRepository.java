@@ -27,4 +27,6 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
      * @return Optional do projeto encontrado.
      */
     Optional<Project> findBySlug(String slug);
+
+    List<Project> findByAutoWipTrue();
 }

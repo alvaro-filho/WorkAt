@@ -16,6 +16,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     Optional<User> findByUsername(String username);
 
+    Optional<User> findByUsernameIgnoreCase(String username);
+
     /**
      * Método para encontrar um usuário pelo e-mail.
      * JPA irá gerar a implementação do findByEmail.

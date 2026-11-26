@@ -225,4 +225,33 @@ class ProjectMembershipServiceTest {
         user.setEmail(email);
         return user;
     }
+
+    @Test
+    void invitesByUsernameWhenThePersonAllowsIt() {
+        friend.setUsername("ana_artista");
+        when(userRepository.findByUsername("ana_artista")).thenReturn(Optional.of(friend));
+
+        ProjectInvitation invitation = service.invite(60L, owner, "@ana_artista");
+
+        assertSame(friend, invitation.getInvitedUser());
+    }
+
+    @Test
+    void usernameInviteIsRefusedWhenThePersonOnlyAcceptsEmail() {
+        friend.setUsername("ana_artista");
+        friend.setInviteByUsername(false);
+        when(userRepository.findByUsername("ana_artista")).thenReturn(Optional.of(friend));
+
+        assertEquals(403, statusOf(() -> service.invite(60L, owner, "@ana_artista")));
+        // Pelo e-mail continua funcionando.
+        assertSame(friend, service.invite(60L, owner, "amigo@test.test").getInvitedUser());
+    }
+
+    @Test
+    void unknownUsernameIsNotFound() {
+        when(userRepository.findByUsername("ninguem")).thenReturn(Optional.empty());
+        when(userRepository.findByUsernameIgnoreCase("ninguem")).thenReturn(Optional.empty());
+
+        assertEquals(404, statusOf(() -> service.invite(60L, owner, "@ninguem")));
+    }
 }

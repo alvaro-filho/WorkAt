@@ -61,14 +61,17 @@ export function ReviewPanel({
 
   if (task.status === "REVIEW" && isOwner) {
     return (
-      <section className="glass space-y-3 rounded-2xl border-primary/40 p-4" aria-labelledby="review-title">
+      <section
+        className="glass space-y-3 rounded-2xl border-primary/40 p-4"
+        aria-labelledby="review-title"
+      >
         <div>
           <h3 id="review-title" className="text-sm font-semibold">
             Aguardando a sua revisão
           </h3>
           <p className="text-sm text-muted-foreground">
-            {task.assignee ? `${task.assignee.fullName} enviou` : "A tarefa foi enviada"} para revisão. Aprove para
-            concluir ou peça um ajuste.
+            {task.assignee ? `${task.assignee.fullName} enviou` : "A tarefa foi enviada"} para
+            revisão. Aprove para concluir ou peça um ajuste.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -112,7 +115,9 @@ export function ReviewPanel({
               </Button>
               <Button
                 disabled={busy || !note.trim()}
-                onClick={() => void run(() => api.reviewTask(task.id, "REQUEST_CHANGES", note.trim()))}
+                onClick={() =>
+                  void run(() => api.reviewTask(task.id, "REQUEST_CHANGES", note.trim()))
+                }
               >
                 Enviar pedido
               </Button>
@@ -127,7 +132,9 @@ export function ReviewPanel({
     return (
       <section className="glass rounded-2xl p-4 text-sm">
         <p className="font-medium">Em revisão</p>
-        <p className="text-muted-foreground">O dono do projeto vai aprovar ou pedir ajuste. Você recebe um aviso.</p>
+        <p className="text-muted-foreground">
+          O diretor do projeto vai aprovar ou pedir ajuste. Você recebe um aviso.
+        </p>
       </section>
     );
   }
@@ -135,7 +142,7 @@ export function ReviewPanel({
   if (contractor && (task.status === "TODO" || task.status === "IN_PROGRESS")) {
     return (
       <section className="glass space-y-2 rounded-2xl p-4">
-        <p className="text-sm text-muted-foreground">Terminou? Envie para o dono revisar.</p>
+        <p className="text-sm text-muted-foreground">Terminou? Envie para o diretor revisar.</p>
         <Button
           disabled={busy}
           className="gradient-primary w-full text-primary-foreground"
@@ -227,7 +234,9 @@ export function CommentsSection({
     <section className="glass space-y-4 rounded-2xl p-5" aria-labelledby="comments-title">
       <h3 id="comments-title" className="flex items-center gap-2 text-sm font-semibold">
         <MessageSquare className="size-4" /> Conversa
-        {comments && comments.length > 0 && <span className="font-normal text-muted-foreground">· {comments.length}</span>}
+        {comments && comments.length > 0 && (
+          <span className="font-normal text-muted-foreground">· {comments.length}</span>
+        )}
       </h3>
 
       {comments && comments.length === 0 && (
@@ -251,11 +260,17 @@ export function CommentsSection({
                       : "bg-white/[0.03]"
                 }`}
               >
-                <UserAvatar name={comment.author.fullName} src={comment.author.avatarUrl} size="sm" />
+                <UserAvatar
+                  name={comment.author.fullName}
+                  src={comment.author.avatarUrl}
+                  size="sm"
+                />
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
                     <span className="font-medium">{comment.author.fullName}</span>
-                    <span className="text-xs text-muted-foreground">{relativeTime(comment.createdAt, now)}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {relativeTime(comment.createdAt, now)}
+                    </span>
                     {comment.kind === "CHANGES_REQUESTED" && (
                       <span className="text-xs font-medium text-amber-300">pediu ajuste</span>
                     )}

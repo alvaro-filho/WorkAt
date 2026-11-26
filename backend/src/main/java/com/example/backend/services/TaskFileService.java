@@ -198,6 +198,16 @@ public class TaskFileService {
         return fileRepository.save(file);
     }
 
+    /** Tira a marca de imagem final (a tarefa fica sem imagem final até outra ser marcada). */
+    @Transactional
+    public TaskFile unmarkFinal(Long fileId, User user) {
+        TaskFile file = findVisibleFile(fileId, user);
+        access.ensureCanWorkOnTask(file.getTask(), user);
+        access.ensureActive(file.getTask().getProject());
+        file.setFinalImage(false);
+        return fileRepository.save(file);
+    }
+
     /** Quem enviou ou o dono do projeto pode apagar. */
     @Transactional
     public void delete(Long fileId, User user) {

@@ -73,20 +73,31 @@ public class ProfileService {
             projects.add(new ProfileResponse.ProfileProject(project.getId(), project.getName(), project.getDescription(),
                     project.getType(), ownerRole, project.getStatus(), nda, false,
                     project.getCreatedByUser() == null ? null : project.getCreatedByUser().getFullName(),
-                    publicView, publicView ? postService.coverOf(project).orElse(null) : null));
+                    publicView, publicView ? postService.coverOf(project).orElse(null) : null,
+                    publicView ? postService.lastPublicActivity(project).orElse(project.getPublicSince()) : null));
         }
 
         List<Post> visiblePosts = postService.visibleByAuthor(owner, viewer);
-        List<PostResponse> portfolio = visiblePosts.stream()
-                .filter(post -> post.getKind() == PostKind.STANDALONE && !post.isHiddenFromPortfolio())
-                .filter(post -> !post.getImages().isEmpty())
-                .map(postService::toResponse)
+        List<PostResponse> posts = postService.toResponses(visiblePosts, viewer);
+        List<PostResponse> portfolio = posts.stream()
+                .filter(post -> post.kind() == PostKind.STANDALONE && !post.hiddenFromPortfolio())
+                .filter(post -> !post.images().isEmpty())
                 .toList();
-        List<PostResponse> posts = visiblePosts.stream().map(postService::toResponse).toList();
+        var repostEntries = postService.reactedBy(owner, com.example.backend.models.PostReaction.Type.REPOST, viewer);
+        List<PostResponse> repostResponses = postService.toResponses(
+                repostEntries.stream().map(java.util.Map.Entry::getKey).toList(), viewer);
+        List<ProfileResponse.Repost> reposts = new ArrayList<>();
+        for (int index = 0; index < repostEntries.size(); index++) {
+            reposts.add(new ProfileResponse.Repost(repostResponses.get(index), repostEntries.get(index).getValue()));
+        }
+        List<PostResponse> saved = me
+                ? postService.toResponses(postService.reactedBy(owner, com.example.backend.models.PostReaction.Type.SAVE, viewer)
+                        .stream().map(java.util.Map.Entry::getKey).toList(), viewer)
+                : List.of();
         List<HeatmapDTO> heatmap = activityEventService.getHeatmap(owner.getId());
 
         return new ProfileResponse(UserSummary.from(owner), me, owner.getCreatedAt(), portfolio, posts, projects,
                 hiddenPersonal, heatmap, owner.getBio(), ProfileResponse.split(owner.getSpecialties(), ","),
-                ProfileResponse.split(owner.getLinks(), "\n"), owner.bannerUrl());
+                ProfileResponse.split(owner.getLinks(), "\n"), owner.bannerUrl(), reposts, saved);
     }
 }

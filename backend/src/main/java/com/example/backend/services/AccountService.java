@@ -50,6 +50,8 @@ public class AccountService {
             "png", "image/png", "jpg", "image/jpeg", "jpeg", "image/jpeg", "webp", "image/webp");
     private static final long AVATAR_MAX_BYTES = 5L * 1024 * 1024;
     private static final long BANNER_MAX_BYTES = 8L * 1024 * 1024;
+    /** O original (usado só para reajustar o enquadramento) pode ser maior que a imagem recortada. */
+    private static final long ORIGINAL_MAX_BYTES = 20L * 1024 * 1024;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
@@ -103,6 +105,15 @@ public class AccountService {
 
     public long quotaBytes() {
         return taskFileService.quotaBytes();
+    }
+
+    /** Aba Permissões: se outras pessoas podem convidar pelo @usuário (além do e-mail). */
+    @Transactional
+    public User updatePermissions(User user, Boolean inviteByUsername) {
+        if (inviteByUsername != null) {
+            user.setInviteByUsername(inviteByUsername);
+        }
+        return userRepository.save(user);
     }
 
     @Transactional
@@ -179,11 +190,27 @@ public class AccountService {
 
     @Transactional
     public User uploadAvatar(User user, MultipartFile file) {
+        return uploadAvatar(user, file, null, null);
+    }
+
+    /**
+     * Foto recortada (a que aparece no site), mais o original e o enquadramento escolhido, para dar para
+     * reajustar depois sem perder o resto da imagem.
+     */
+    @Transactional
+    public User uploadAvatar(User user, MultipartFile file, MultipartFile original, String crop) {
         StoredImage image = storeProfileImage(file, AVATAR_MAX_BYTES, "foto");
         String old = user.getAvatarStoredName();
         user.setAvatarStoredName(image.storedName());
         user.setAvatarContentType(image.contentType());
         user.setAvatarUpdatedAt(LocalDateTime.now());
+        if (original != null && !original.isEmpty()) {
+            StoredImage source = storeProfileImage(original, ORIGINAL_MAX_BYTES, "imagem original");
+            storage.delete(user.getAvatarOriginalStoredName());
+            user.setAvatarOriginalStoredName(source.storedName());
+            user.setAvatarOriginalContentType(source.contentType());
+        }
+        user.setAvatarCrop(cleanCrop(crop));
         User saved = userRepository.save(user);
         storage.delete(old);
         return saved;
@@ -191,21 +218,59 @@ public class AccountService {
 
     @Transactional
     public User uploadBanner(User user, MultipartFile file) {
+        return uploadBanner(user, file, null, null);
+    }
+
+    @Transactional
+    public User uploadBanner(User user, MultipartFile file, MultipartFile original, String crop) {
         StoredImage image = storeProfileImage(file, BANNER_MAX_BYTES, "capa");
         String old = user.getBannerStoredName();
         user.setBannerStoredName(image.storedName());
         user.setBannerContentType(image.contentType());
         user.setBannerUpdatedAt(LocalDateTime.now());
+        if (original != null && !original.isEmpty()) {
+            StoredImage source = storeProfileImage(original, ORIGINAL_MAX_BYTES, "imagem original");
+            storage.delete(user.getBannerOriginalStoredName());
+            user.setBannerOriginalStoredName(source.storedName());
+            user.setBannerOriginalContentType(source.contentType());
+        }
+        user.setBannerCrop(cleanCrop(crop));
         User saved = userRepository.save(user);
         storage.delete(old);
         return saved;
     }
 
+    /** Enquadramento: só um JSON curto com números (posição e zoom); o resto é ignorado. */
+    private static String cleanCrop(String crop) {
+        if (crop == null || crop.isBlank() || crop.length() > 200 || !crop.matches("[{}\\[\\]\"a-zA-Z0-9:.,\\- ]+")) {
+            return null;
+        }
+        return crop.trim();
+    }
+
+    /** Original da foto ou da capa da própria pessoa (para reajustar). Sem original guardado, a imagem atual. */
+    @Transactional(readOnly = true)
+    public Avatar original(User user, boolean banner) {
+        String stored = banner ? user.getBannerOriginalStoredName() : user.getAvatarOriginalStoredName();
+        String type = banner ? user.getBannerOriginalContentType() : user.getAvatarOriginalContentType();
+        if (stored == null) {
+            stored = banner ? user.getBannerStoredName() : user.getAvatarStoredName();
+            type = banner ? user.getBannerContentType() : user.getAvatarContentType();
+        }
+        Resource content = storage.load(stored)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem não encontrada."));
+        return new Avatar(content, type);
+    }
+
     @Transactional
     public User removeBanner(User user) {
         storage.delete(user.getBannerStoredName());
+        storage.delete(user.getBannerOriginalStoredName());
         user.setBannerStoredName(null);
         user.setBannerContentType(null);
+        user.setBannerOriginalStoredName(null);
+        user.setBannerOriginalContentType(null);
+        user.setBannerCrop(null);
         user.setBannerUpdatedAt(LocalDateTime.now());
         return userRepository.save(user);
     }
@@ -222,8 +287,12 @@ public class AccountService {
     @Transactional
     public User removeAvatar(User user) {
         storage.delete(user.getAvatarStoredName());
+        storage.delete(user.getAvatarOriginalStoredName());
         user.setAvatarStoredName(null);
         user.setAvatarContentType(null);
+        user.setAvatarOriginalStoredName(null);
+        user.setAvatarOriginalContentType(null);
+        user.setAvatarCrop(null);
         user.setAvatarUpdatedAt(LocalDateTime.now());
         return userRepository.save(user);
     }
@@ -371,6 +440,8 @@ public class AccountService {
         notificationRepository.deleteAllOf(user);
         storage.delete(user.getAvatarStoredName());
         storage.delete(user.getBannerStoredName());
+        storage.delete(user.getAvatarOriginalStoredName());
+        storage.delete(user.getBannerOriginalStoredName());
 
         String suffix = user.getId() + "-" + Long.toHexString(RANDOM.nextLong());
         user.setUsername("excluido-" + suffix);

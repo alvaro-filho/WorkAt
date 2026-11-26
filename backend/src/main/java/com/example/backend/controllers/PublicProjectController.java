@@ -27,6 +27,13 @@ public class PublicProjectController {
         this.userRepository = userRepository;
     }
 
+    /** Aba Projetos do Explorar (sem login). */
+    @GetMapping("/api/v1/explore/projects")
+    public java.util.List<com.example.backend.dto.PublicProjectCard> explore(
+            @RequestParam(required = false, defaultValue = "60") int limit) {
+        return publicProjectService.listPublic(Math.max(1, Math.min(limit, 100)));
+    }
+
     @GetMapping("/api/v1/projects/{projectId}/public")
     public PublicProjectResponse view(@PathVariable Long projectId,
                                       @RequestParam(required = false, defaultValue = "asc") String order,

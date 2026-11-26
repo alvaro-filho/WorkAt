@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft, LogIn, Menu, Plus } from "lucide-react";
 
@@ -33,6 +33,7 @@ export function AppLayout({
   flush,
   aside,
   actions,
+  revealTitleAfter,
   children,
 }: {
   title: string;
@@ -45,6 +46,8 @@ export function AppLayout({
   aside?: ReactNode;
   /** Botões à direita do título (ex.: "Marcar todas como lidas"). */
   actions?: ReactNode;
+  /** Esconde o título até a página rolar esses pixels (perfil: o nome já aparece embaixo da foto). */
+  revealTitleAfter?: number;
   children: ReactNode;
 }) {
   const { user } = useAuth();
@@ -53,6 +56,16 @@ export function AppLayout({
   const [drawer, setDrawer] = useState(false);
   const mode = layout ?? (wide ? "wide" : "column");
   const noPadding = flush ?? wide;
+  const [scrolledPast, setScrolledPast] = useState(false);
+  useEffect(() => {
+    if (revealTitleAfter === undefined) return;
+    const update = () => setScrolledPast(window.scrollY > revealTitleAfter);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, [revealTitleAfter]);
+  // Calculado na hora (sem esperar o efeito), para o título não piscar ao abrir a página.
+  const titleShown = revealTitleAfter === undefined || scrolledPast;
 
   return (
     <div className="flex min-h-screen justify-center bg-background">
@@ -65,7 +78,9 @@ export function AppLayout({
       <div className="flex w-full min-w-0 sm:w-auto">
         <main
           className={`min-h-screen w-full min-w-0 border-border pb-24 sm:border-x sm:pb-0 ${
-            mode === "wide" ? "sm:w-[min(980px,calc(100vw-88px))]" : "sm:w-[min(600px,calc(100vw-88px))]"
+            mode === "wide"
+              ? "sm:w-[min(980px,calc(100vw-88px))]"
+              : "sm:w-[min(600px,calc(100vw-88px))]"
           }`}
         >
           <div className="sticky top-0 z-20 flex h-[53px] items-center gap-4 border-b border-border bg-background/85 px-4 backdrop-blur-md">
@@ -75,16 +90,23 @@ export function AppLayout({
                 type="button"
                 aria-label="Voltar"
                 onClick={() =>
-                  window.history.length > 1 ? router.history.back() : router.navigate({ to: "/explorar" })
+                  window.history.length > 1
+                    ? router.history.back()
+                    : router.navigate({ to: "/explorar" })
                 }
                 className="-ml-2 rounded-full p-2 hover:bg-white/10"
               >
                 <ArrowLeft className="size-5" />
               </button>
             )}
-            <div className="min-w-0 flex-1">
+            <div
+              className={`min-w-0 flex-1 transition-opacity duration-200 ${titleShown ? "opacity-100" : "pointer-events-none opacity-0"}`}
+              aria-hidden={titleShown ? undefined : true}
+            >
               <h1 className="truncate text-xl leading-6 font-bold">{title}</h1>
-              {subtitle && <p className="truncate text-[13px] leading-4 text-muted-foreground">{subtitle}</p>}
+              {subtitle && (
+                <p className="truncate text-[13px] leading-4 text-muted-foreground">{subtitle}</p>
+              )}
             </div>
             {actions}
           </div>
@@ -116,7 +138,12 @@ export function AppLayout({
 function MobileMenuButton({ onOpen }: { onOpen: () => void }) {
   const { user } = useAuth();
   return (
-    <button type="button" aria-label="Abrir menu" onClick={onOpen} className="-ml-1 rounded-full sm:hidden">
+    <button
+      type="button"
+      aria-label="Abrir menu"
+      onClick={onOpen}
+      className="-ml-1 rounded-full sm:hidden"
+    >
       {user ? (
         <UserAvatar name={user.fullName ?? user.username} src={user.avatarUrl} size="sm" />
       ) : (
@@ -164,7 +191,9 @@ function MobileNav({ counts }: { counts: MenuCounts }) {
             className="flex flex-col items-center rounded-full px-3 py-1.5"
           >
             <span className="relative">
-              <item.icon className={`size-[26px] ${isActive(pathname, item.url) ? "stroke-[2.6]" : "stroke-[1.75]"}`} />
+              <item.icon
+                className={`size-[26px] ${isActive(pathname, item.url) ? "stroke-[2.6]" : "stroke-[1.75]"}`}
+              />
               <CountBadge value={item.badge} />
             </span>
           </Link>

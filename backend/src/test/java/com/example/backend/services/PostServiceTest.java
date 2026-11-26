@@ -279,4 +279,70 @@ class PostServiceTest {
         user.setEmail("u" + id + "@teste.local");
         return user;
     }
+
+    @Test
+    void standalonePostAcceptsUpToSixImages() {
+        List<org.springframework.web.multipart.MultipartFile> six = new java.util.ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            six.add(new MockMultipartFile("file", "etapa" + i + ".png", "image/png", new byte[]{1, 2, (byte) i}));
+        }
+
+        Post post = service.createStandalone(owner, six, "Estudos", null);
+
+        assertEquals(6, post.getImages().size());
+    }
+
+    @Test
+    void standalonePostRejectsTheSeventhImage() {
+        List<org.springframework.web.multipart.MultipartFile> seven = new java.util.ArrayList<>();
+        for (int i = 0; i < 7; i++) {
+            seven.add(new MockMultipartFile("file", "etapa" + i + ".png", "image/png", new byte[]{1, 2, (byte) i}));
+        }
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.createStandalone(owner, seven, "Estudos", null));
+        assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
+        verify(postRepository, never()).save(any(Post.class));
+    }
+
+    @Test
+    void likeIsSavedOnceAndCanBeUndone() {
+        com.example.backend.repositories.PostReactionRepository reactions =
+                mock(com.example.backend.repositories.PostReactionRepository.class);
+        service.setReactionRepository(reactions);
+        Post standalone = post(PostKind.STANDALONE, null, null);
+        standalone.setId(41L);
+        standalone.setAuthor(owner);
+        when(postRepository.findById(41L)).thenReturn(Optional.of(standalone));
+        com.example.backend.models.PostReaction existing = com.example.backend.models.PostReaction.of(
+                standalone, stranger, com.example.backend.models.PostReaction.Type.LIKE);
+
+        when(reactions.findByPostAndUserAndType(standalone, stranger, com.example.backend.models.PostReaction.Type.LIKE))
+                .thenReturn(Optional.empty());
+        service.react(41L, stranger, com.example.backend.models.PostReaction.Type.LIKE, true);
+        verify(reactions).save(any(com.example.backend.models.PostReaction.class));
+
+        when(reactions.findByPostAndUserAndType(standalone, stranger, com.example.backend.models.PostReaction.Type.LIKE))
+                .thenReturn(Optional.of(existing));
+        service.react(41L, stranger, com.example.backend.models.PostReaction.Type.LIKE, true);
+        verify(reactions, times(1)).save(any(com.example.backend.models.PostReaction.class));
+
+        service.react(41L, stranger, com.example.backend.models.PostReaction.Type.LIKE, false);
+        verify(reactions).delete(existing);
+    }
+
+    @Test
+    void cannotReactToAPostYouCannotSee() {
+        service.setReactionRepository(mock(com.example.backend.repositories.PostReactionRepository.class));
+        project.setNdaEnabled(true);
+        project.setType(ProjectType.CORPORATE);
+        Post wip = post(PostKind.WIP, project, task);
+        wip.setId(42L);
+        wip.setAuthor(owner);
+        when(postRepository.findById(42L)).thenReturn(Optional.of(wip));
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.react(42L, stranger, com.example.backend.models.PostReaction.Type.SAVE, true));
+        assertEquals(HttpStatus.NOT_FOUND, error.getStatusCode());
+    }
 }

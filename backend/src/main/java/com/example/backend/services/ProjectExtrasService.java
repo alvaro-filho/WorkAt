@@ -194,4 +194,28 @@ public class ProjectExtrasService {
                 .replaceAll("^-|-$", "");
         return base.isEmpty() ? "arquivo" : base;
     }
+
+    /**
+     * Capa do projeto (a imagem que representa o projeto no portfólio e no Explorar). Só o diretor escolhe.
+     * fileId null volta ao padrão: a imagem mais recente.
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public com.example.backend.models.Project setCover(Long projectId, User user, Long fileId) {
+        com.example.backend.models.Project project = access.requireOwner(projectId, user);
+        if (fileId != null) {
+            com.example.backend.models.TaskFile file = fileRepository.findById(fileId)
+                    .filter(candidate -> candidate.getTask() != null
+                            && project.getId().equals(candidate.getTask().getProject().getId()))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Imagem não encontrada no projeto."));
+            if (!TaskFileService.isPreviewableImage(file.getContentType())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A capa precisa ser uma imagem PNG, JPG, WEBP ou GIF.");
+            }
+            if (file.getTask().isHiddenFromPublic()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Essa imagem é de uma tarefa interna; escolha uma imagem que aparece em público.");
+            }
+        }
+        project.setCoverFileId(fileId);
+        return project;
+    }
 }

@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CalendarDays, Check, ExternalLink, Globe, Link2, Lock } from "lucide-react";
+import {
+  Bookmark,
+  CalendarDays,
+  Check,
+  ExternalLink,
+  Globe,
+  Layers,
+  Link2,
+  Lock,
+} from "lucide-react";
 
 import { ArtImage } from "@/components/art/ArtPieces";
 import { ActivityHeatmap } from "@/components/dashboard/ActivityHeatmap";
@@ -8,21 +17,25 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { DefaultAside } from "@/components/layout/RightAside";
 import { PostCard } from "@/components/posts/PostCard";
 import { PostComposer } from "@/components/posts/PostComposer";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api, ApiError, type Post, type Profile, type ProfileProject } from "@/lib/api";
-import { projectTypeInfo, roleLabel } from "@/lib/project-labels";
+import { projectTypeInfo } from "@/lib/project-labels";
 
 export const Route = createFileRoute("/_public/u/$username")({
   head: () => ({ meta: [{ title: "Perfil — WorkAt" }] }),
   component: ProfilePage,
 });
 
-type Tab = "posts" | "portfolio" | "projects" | "activity";
+type Tab = "portfolio" | "projects" | "posts" | "saved";
+
+type PortfolioItem =
+  | { kind: "post"; post: Post; date: string }
+  | { kind: "project"; project: ProfileProject & { id: number }; date: string };
 
 /**
- * Perfil no estilo das redes sociais: capa, foto sobre a capa, bio, links e abas.
- * Visitantes (com ou sem login) veem só o que é público; projetos com NDA aparecem mascarados.
+ * Perfil profissional: capa, foto, nome, atividade logo abaixo do nome e as abas
+ * Portfólio (abre primeiro), Projetos, Posts e Salvos (só a própria pessoa).
+ * Visitantes veem só o que é público; projetos sob NDA aparecem mascarados.
  */
 function ProfilePage() {
   const { username } = Route.useParams();
@@ -30,7 +43,7 @@ function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
-  const [tab, setTab] = useState<Tab>("posts");
+  const [tab, setTab] = useState<Tab>("portfolio");
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
@@ -39,7 +52,7 @@ function ProfilePage() {
     setProfile(null);
     setNotFound(false);
     setError(null);
-    setTab("posts");
+    setTab("portfolio");
     api
       .profile(username)
       .then((loaded) => active && setProfile(loaded))
@@ -53,20 +66,33 @@ function ProfilePage() {
     };
   }, [username]);
 
+  /** Uma publicação mudou (editada, curtida, republicada ou salva): atualiza todas as listas do perfil. */
   const changePost = (post: Post) =>
-    setProfile((current) =>
-      current
-        ? {
-            ...current,
-            posts: current.posts.map((item) => (item.id === post.id ? post : item)),
-            portfolio: post.hiddenFromPortfolio
-              ? current.portfolio.filter((item) => item.id !== post.id)
-              : current.portfolio.some((item) => item.id === post.id)
-                ? current.portfolio.map((item) => (item.id === post.id ? post : item))
-                : [post, ...current.portfolio],
-          }
-        : current,
-    );
+    setProfile((current) => {
+      if (!current) return current;
+      const swap = (list: Post[]) => list.map((item) => (item.id === post.id ? post : item));
+      const isOwn = post.author.username === current.user.username;
+      let portfolio = swap(current.portfolio);
+      if (isOwn && post.kind === "STANDALONE") {
+        portfolio = post.hiddenFromPortfolio
+          ? portfolio.filter((item) => item.id !== post.id)
+          : portfolio.some((item) => item.id === post.id)
+            ? portfolio
+            : [post, ...portfolio];
+      }
+      let reposts = current.reposts.map((item) =>
+        item.post.id === post.id ? { ...item, post } : item,
+      );
+      let saved = swap(current.saved);
+      if (current.me) {
+        if (!post.reposted) reposts = reposts.filter((item) => item.post.id !== post.id);
+        else if (!isOwn && !reposts.some((item) => item.post.id === post.id))
+          reposts = [{ post, repostedAt: new Date().toISOString() }, ...reposts];
+        if (!post.saved) saved = saved.filter((item) => item.id !== post.id);
+        else if (!saved.some((item) => item.id === post.id)) saved = [post, ...saved];
+      }
+      return { ...current, posts: swap(current.posts), portfolio, reposts, saved };
+    });
   const removePost = (postId: number) =>
     setProfile((current) =>
       current
@@ -74,13 +100,17 @@ function ProfilePage() {
             ...current,
             posts: current.posts.filter((item) => item.id !== postId),
             portfolio: current.portfolio.filter((item) => item.id !== postId),
+            saved: current.saved.filter((item) => item.id !== postId),
+            reposts: current.reposts.filter((item) => item.post.id !== postId),
           }
         : current,
     );
   const addPost = (post: Post) => {
     setNow(Date.now());
     setProfile((current) =>
-      current ? { ...current, posts: [post, ...current.posts], portfolio: [post, ...current.portfolio] } : current,
+      current
+        ? { ...current, posts: [post, ...current.posts], portfolio: [post, ...current.portfolio] }
+        : current,
     );
   };
 
@@ -92,6 +122,30 @@ function ProfilePage() {
       }, {}),
     [profile],
   );
+
+  // Portfólio: artes avulsas e projetos públicos no mesmo quadro, do mais recente para o mais antigo.
+  const portfolio = useMemo<PortfolioItem[]>(() => {
+    if (!profile) return [];
+    const posts: PortfolioItem[] = profile.portfolio
+      .filter((post) => post.images.length > 0)
+      .map((post) => ({ kind: "post", post, date: post.createdAt }));
+    const projects: PortfolioItem[] = profile.projects
+      .filter(
+        (project): project is ProfileProject & { id: number } =>
+          project.publicView && project.id !== null,
+      )
+      .map((project) => ({ kind: "project", project, date: project.lastActivityAt ?? "" }));
+    return [...posts, ...projects].sort((a, b) => b.date.localeCompare(a.date));
+  }, [profile]);
+
+  // Posts: o que a pessoa publicou e o que republicou, por data.
+  const timeline = useMemo(() => {
+    if (!profile) return [];
+    return [
+      ...profile.posts.map((post) => ({ post, date: post.createdAt, repost: false })),
+      ...profile.reposts.map((item) => ({ post: item.post, date: item.repostedAt, repost: true })),
+    ].sort((a, b) => b.date.localeCompare(a.date));
+  }, [profile]);
 
   if (notFound || error) {
     return (
@@ -123,9 +177,7 @@ function ProfilePage() {
   const { user } = profile;
   const isCompany = user.role === "COMPANY";
   const totalProjects = profile.projects.length + profile.hiddenPersonalProjects;
-  const publicProjects = profile.projects.filter(
-    (project): project is ProfileProject & { id: number } => project.publicView && project.id !== null,
-  );
+  const artCount = portfolio.length;
 
   const share = async () => {
     try {
@@ -138,31 +190,37 @@ function ProfilePage() {
   };
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: "posts", label: "Posts" },
     { id: "portfolio", label: "Portfólio" },
     { id: "projects", label: "Projetos" },
-    { id: "activity", label: "Atividade" },
+    { id: "posts", label: "Posts" },
+    ...(profile.me ? [{ id: "saved" as const, label: "Salvos" }] : []),
   ];
 
   return (
     <AppLayout
       title={user.fullName}
-      subtitle={`${profile.posts.length} ${profile.posts.length === 1 ? "publicação" : "publicações"}`}
+      subtitle={`${artCount} ${artCount === 1 ? "trabalho" : "trabalhos"} no portfólio`}
       back={!profile.me}
       flush
+      revealTitleAfter={260}
       aside={
         <DefaultAside
-          extra={profile.me ? <FirstSteps profile={profile} onPublish={() => setComposerOpen(true)} /> : undefined}
+          extra={
+            profile.me ? (
+              <FirstSteps profile={profile} onPublish={() => setComposerOpen(true)} />
+            ) : undefined
+          }
         />
       }
     >
-      {/* Capa: 3:1 (200px de altura na coluna de 600px) */}
+      {/* Capa 3:1 (o enquadramento é escolhido ao enviar, em Minha conta) */}
       <div className="aspect-[3/1] w-full overflow-hidden bg-gradient-to-br from-primary/60 via-primary/20 to-neon/30">
-        {profile.bannerUrl && <img src={profile.bannerUrl} alt="" className="size-full object-cover" />}
+        {profile.bannerUrl && (
+          <img src={profile.bannerUrl} alt="" className="size-full object-cover" />
+        )}
       </div>
 
       <div className="px-4 pt-3">
-        {/* Foto sobre a capa (metade para fora) e a ação principal à direita */}
         <div className="flex items-start justify-between gap-3">
           <div className="relative z-10 -mt-[clamp(40px,11vw,70px)] shrink-0">
             {user.avatarUrl ? (
@@ -182,7 +240,11 @@ function ProfilePage() {
               <Link to="/conta">Editar perfil</Link>
             </Button>
           ) : (
-            <Button variant="outline" className="h-9 rounded-full px-4 font-bold" onClick={() => void share()}>
+            <Button
+              variant="outline"
+              className="h-9 rounded-full px-4 font-bold"
+              onClick={() => void share()}
+            >
               {copied ? <Check className="mr-1 size-4" /> : <Link2 className="mr-1 size-4" />}
               {copied ? "Link copiado" : "Compartilhar"}
             </Button>
@@ -200,7 +262,17 @@ function ProfilePage() {
           <p className="text-[15px] text-muted-foreground">@{user.username}</p>
         </div>
 
-        {profile.bio && <p className="mt-3 text-[15px] leading-5 whitespace-pre-wrap">{profile.bio}</p>}
+        {/* Atividade logo abaixo do nome */}
+        <section
+          aria-label="Atividade de produção"
+          className="mt-3 rounded-2xl border border-border p-3"
+        >
+          <ActivityHeatmap data={heatmap} variant="inline" />
+        </section>
+
+        {profile.bio && (
+          <p className="mt-3 text-[15px] leading-5 whitespace-pre-wrap">{profile.bio}</p>
+        )}
 
         {profile.specialties.length > 0 && (
           <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Especialidades">
@@ -212,7 +284,6 @@ function ProfilePage() {
           </ul>
         )}
 
-        {/* Linha de informações */}
         <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[15px] text-muted-foreground">
           {profile.links.map((link) => (
             <li key={link} className="min-w-0">
@@ -223,26 +294,41 @@ function ProfilePage() {
                 className="inline-flex max-w-full items-center gap-1 text-primary hover:underline"
               >
                 <ExternalLink className="size-[18px] shrink-0 text-muted-foreground" />
-                <span className="truncate">{link.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}</span>
+                <span className="truncate">
+                  {link.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
+                </span>
               </a>
             </li>
           ))}
           {profile.memberSince && (
             <li className="inline-flex items-center gap-1">
               <CalendarDays className="size-[18px]" />
-              Entrou em {new Date(profile.memberSince).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+              Entrou em{" "}
+              {new Date(profile.memberSince).toLocaleDateString("pt-BR", {
+                month: "long",
+                year: "numeric",
+              })}
             </li>
           )}
         </ul>
 
         {/* Números */}
-        <p className="mt-3 flex gap-5 text-[15px]">
-          <button type="button" onClick={() => setTab("posts")} className="hover:underline">
-            <span className="font-bold">{profile.posts.length}</span>{" "}
-            <span className="text-muted-foreground">publicações</span>
+        <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[15px]">
+          <button type="button" onClick={() => setTab("portfolio")} className="hover:underline">
+            <span className="font-bold">{artCount}</span>{" "}
+            <span className="text-muted-foreground">no portfólio</span>
           </button>
           <button type="button" onClick={() => setTab("projects")} className="hover:underline">
-            <span className="font-bold">{totalProjects}</span> <span className="text-muted-foreground">projetos</span>
+            <span className="font-bold">{totalProjects}</span>{" "}
+            <span className="text-muted-foreground">
+              {totalProjects === 1 ? "projeto" : "projetos"}
+            </span>
+          </button>
+          <button type="button" onClick={() => setTab("posts")} className="hover:underline">
+            <span className="font-bold">{profile.posts.length}</span>{" "}
+            <span className="text-muted-foreground">
+              {profile.posts.length === 1 ? "publicação" : "publicações"}
+            </span>
           </button>
         </p>
       </div>
@@ -253,8 +339,11 @@ function ProfilePage() {
         </div>
       )}
 
-      {/* Abas: o traço fica do tamanho do rótulo */}
-      <div role="tablist" aria-label="Seções do perfil" className="mt-4 flex border-b border-border">
+      <div
+        role="tablist"
+        aria-label="Seções do perfil"
+        className="mt-4 flex border-b border-border"
+      >
         {tabs.map((item) => (
           <button
             key={item.id}
@@ -269,92 +358,35 @@ function ProfilePage() {
             >
               {item.label}
               {tab === item.id && (
-                <span className="absolute inset-x-0 bottom-0 h-1 rounded-full bg-primary" aria-hidden="true" />
+                <span
+                  className="absolute inset-x-0 bottom-0 h-1 rounded-full bg-primary"
+                  aria-hidden="true"
+                />
               )}
             </span>
           </button>
         ))}
       </div>
 
-      {tab === "posts" &&
-        (profile.posts.length === 0 ? (
-          <EmptyTab
-            title={profile.me ? "Você ainda não publicou nada" : "Nenhuma publicação ainda"}
-            text={
-              profile.me
-                ? "Use o botão Publicar no menu, ou ligue o WIP automático em um projeto."
-                : "Quando esta conta publicar algo, aparece aqui."
-            }
-          />
-        ) : (
-          <ol className="divide-y divide-border border-b border-border" aria-label="Posts">
-            {profile.posts.map((post) => (
-              <PostCard key={post.id} post={post} now={now} onChanged={changePost} onDeleted={removePost} />
-            ))}
-          </ol>
-        ))}
-
       {tab === "portfolio" &&
-        (profile.portfolio.length === 0 && publicProjects.length === 0 ? (
+        (portfolio.length === 0 ? (
           <EmptyTab
             title="Portfólio vazio"
             text={
               profile.me
-                ? "Publique artes ou abra um projeto ao público para montar seu portfólio."
+                ? "Publique artes ou abra um projeto ao público (WIP automático) para montar seu portfólio."
                 : "Ainda não há nada no portfólio."
             }
           />
         ) : (
-          <div>
-            {profile.portfolio.length > 0 && (
-              <ul className="grid grid-cols-3 gap-0.5" aria-label="Artes">
-                {profile.portfolio
-                  .filter((post) => post.images.length > 0)
-                  .map((post) => (
-                    <li key={post.id}>
-                      <Link
-                        to="/publicacao/$postId"
-                        params={{ postId: String(post.id) }}
-                        className="group block aspect-square overflow-hidden bg-white/5"
-                        aria-label={post.title ?? "Arte"}
-                      >
-                        <ArtImage
-                          src={post.images[0]?.url ?? null}
-                          title={post.title ?? "Arte"}
-                          className="size-full object-cover transition-transform group-hover:scale-105"
-                        />
-                      </Link>
-                    </li>
-                  ))}
-              </ul>
-            )}
-            {publicProjects.length > 0 && (
-              <section aria-labelledby="public-projects-title" className="border-t border-border p-4">
-                <h3 id="public-projects-title" className="mb-3 text-xl font-extrabold">
-                  Projetos públicos
-                </h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {publicProjects.map((project) => (
-                    <Link
-                      key={project.id}
-                      to="/projetos/$projectId/publico"
-                      params={{ projectId: String(project.id) }}
-                      className="block overflow-hidden rounded-2xl border border-border hover:bg-white/[0.03]"
-                    >
-                      <ArtImage src={project.coverUrl} title={project.name ?? "Projeto"} className="h-36 w-full object-cover" />
-                      <div className="p-3">
-                        <p className="truncate text-[15px] font-bold">{project.name}</p>
-                        <p className="truncate text-[13px] text-muted-foreground">
-                          {projectTypeInfo(project.type).label}
-                          {project.role === "MEMBER" && project.ownerName ? ` · de ${project.ownerName}` : ""}
-                        </p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
+          <ul className="grid grid-cols-3 gap-0.5" aria-label="Portfólio">
+            {portfolio.map((item) => (
+              <PortfolioTile
+                key={item.kind === "post" ? `p${item.post.id}` : `j${item.project.id}`}
+                item={item}
+              />
+            ))}
+          </ul>
         ))}
 
       {tab === "projects" && (
@@ -371,18 +403,60 @@ function ProfilePage() {
           {profile.hiddenPersonalProjects > 0 && (
             <p className="mt-3 text-[13px] text-muted-foreground">
               + {profile.hiddenPersonalProjects}{" "}
-              {profile.hiddenPersonalProjects === 1 ? "projeto pessoal" : "projetos pessoais"} (privados)
+              {profile.hiddenPersonalProjects === 1 ? "projeto pessoal" : "projetos pessoais"}{" "}
+              (privados)
             </p>
           )}
         </div>
       )}
 
-      {tab === "activity" && (
-        <section aria-label="Atividade" className="p-4">
-          <ActivityHeatmap data={heatmap} />
-        </section>
+      {tab === "posts" &&
+        (timeline.length === 0 ? (
+          <EmptyTab
+            title={profile.me ? "Você ainda não publicou nada" : "Nenhuma publicação ainda"}
+            text={
+              profile.me
+                ? "Use o botão Publicar no menu, ou ligue o WIP automático em um projeto."
+                : "Quando esta conta publicar ou republicar algo, aparece aqui."
+            }
+          />
+        ) : (
+          <ol className="divide-y divide-border border-b border-border" aria-label="Posts">
+            {timeline.map((item) => (
+              <PostCard
+                key={`${item.repost ? "r" : "p"}${item.post.id}`}
+                post={item.post}
+                now={now}
+                onChanged={changePost}
+                onDeleted={removePost}
+                {...(item.repost ? { repostedBy: profile.me ? "Você" : user.fullName } : {})}
+              />
+            ))}
+          </ol>
+        ))}
+
+      {tab === "saved" &&
+        profile.me &&
+        (profile.saved.length === 0 ? (
+          <EmptyTab
+            title="Nada salvo ainda"
+            text="Toque no marcador de uma publicação para guardar aqui. Só você vê seus itens salvos."
+          />
+        ) : (
+          <>
+            <p className="flex items-center gap-2 border-b border-border px-4 py-3 text-[13px] text-muted-foreground">
+              <Bookmark className="size-4" /> Só você vê seus itens salvos.
+            </p>
+            <ol className="divide-y divide-border border-b border-border" aria-label="Salvos">
+              {profile.saved.map((post) => (
+                <PostCard key={post.id} post={post} now={now} onChanged={changePost} />
+              ))}
+            </ol>
+          </>
+        ))}
+      {profile.me && (
+        <PostComposer open={composerOpen} onOpenChange={setComposerOpen} onCreated={addPost} />
       )}
-      {profile.me && <PostComposer open={composerOpen} onOpenChange={setComposerOpen} onCreated={addPost} />}
     </AppLayout>
   );
 }
@@ -396,84 +470,158 @@ function EmptyTab({ title, text }: { title: string; text: string }) {
   );
 }
 
+/** Um quadro do portfólio. Arte avulsa e projeto têm o mesmo formato; o projeto abre com todas as etapas. */
+function PortfolioTile({ item }: { item: PortfolioItem }) {
+  const title =
+    item.kind === "post" ? (item.post.title ?? "Arte") : (item.project.name ?? "Projeto");
+  const cover = item.kind === "post" ? (item.post.images[0]?.url ?? null) : item.project.coverUrl;
+  const multiple = item.kind === "project" || (item.kind === "post" && item.post.images.length > 1);
+  const body = (
+    <>
+      <ArtImage
+        src={cover}
+        title={title}
+        className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+      />
+      <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/0 to-black/0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 truncate p-2 text-sm font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+        {title}
+      </span>
+      {multiple && (
+        <Layers
+          className="pointer-events-none absolute top-2 right-2 size-4 text-white drop-shadow"
+          aria-hidden="true"
+        />
+      )}
+    </>
+  );
+  const className =
+    "group relative block aspect-square overflow-hidden bg-white/5 focus-visible:outline-2 focus-visible:outline-primary";
+  return (
+    <li>
+      {item.kind === "post" ? (
+        <Link
+          to="/publicacao/$postId"
+          params={{ postId: String(item.post.id) }}
+          className={className}
+          aria-label={title}
+        >
+          {body}
+        </Link>
+      ) : (
+        <Link
+          to="/projetos/$projectId/publico"
+          params={{ projectId: String(item.project.id) }}
+          className={className}
+          aria-label={`Projeto ${title}`}
+        >
+          {body}
+        </Link>
+      )}
+    </li>
+  );
+}
+
+/** Cartão de projeto: capa, título, descrição, tipo e diretor do projeto. */
 function ProjectCard({ project, me }: { project: ProfileProject; me: boolean }) {
   const info = projectTypeInfo(project.type);
   const Icon = info.icon;
+  const director = project.ownerName ?? "—";
 
   if (project.masked) {
     return (
-      <div className="glass rounded-2xl border border-dashed border-amber-500/40 p-4">
-        <p className="flex items-center gap-2 font-medium">
-          <Lock className="size-4 text-amber-300" /> Projeto sob NDA
-        </p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Trabalhando para{" "}
-          <span className="text-foreground">{project.ownerName ?? "um estúdio"}</span>. O conteúdo é
-          confidencial.
-        </p>
-        <Badge variant="outline" className="mt-3">
-          {info.label}
-        </Badge>
+      <div className="overflow-hidden rounded-2xl border border-dashed border-amber-500/40">
+        <div className="flex h-36 items-center justify-center bg-amber-500/[0.06]">
+          <Lock className="size-8 text-amber-300/80" />
+        </div>
+        <div className="p-3">
+          <p className="text-[15px] font-bold">Projeto sob NDA</p>
+          <p className="text-[13px] text-muted-foreground">
+            O conteúdo é confidencial até a liberação.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full border border-border px-2 py-0.5">{info.label}</span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 px-2 py-0.5 text-amber-300">
+              <Lock className="size-3" /> NDA
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Diretor do projeto: <span className="text-foreground">{director}</span>
+          </p>
+        </div>
       </div>
     );
   }
 
   const body = (
     <>
-      <div className="flex items-start justify-between gap-2">
-        <p className="flex min-w-0 items-center gap-2 font-medium text-primary">
-          <Icon className="size-4 shrink-0" />
-          <span className="truncate">{project.name}</span>
+      {project.coverUrl ? (
+        <ArtImage
+          src={project.coverUrl}
+          title={project.name ?? "Projeto"}
+          className="h-36 w-full object-cover"
+        />
+      ) : (
+        <div className="flex h-36 items-center justify-center bg-white/[0.04]">
+          <Icon className="size-8 text-muted-foreground" />
+        </div>
+      )}
+      <div className="p-3">
+        <p className="truncate text-[15px] font-bold">{project.name}</p>
+        <p className="line-clamp-2 min-h-[2.5em] text-[13px] text-muted-foreground">
+          {project.description || "Sem descrição."}
         </p>
-        <Badge variant="outline" className="shrink-0">
-          {project.status === "CLOSED" ? "Encerrado" : roleLabel(project.role, project.type)}
-        </Badge>
-      </div>
-      <p className="mt-2 line-clamp-2 min-h-8 text-xs text-muted-foreground">
-        {project.description || "Sem descrição."}
-      </p>
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>{info.label}</span>
-        {project.nda && (
-          <span className="inline-flex items-center gap-1 text-amber-300">
-            <Lock className="size-3" /> NDA
-          </span>
-        )}
-        {project.publicView && (
-          <span className="inline-flex items-center gap-1 text-neon">
-            <Globe className="size-3" /> Público
-          </span>
-        )}
-        {project.role === "MEMBER" && project.ownerName && <span>· de {project.ownerName}</span>}
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <span className="rounded-full border border-border px-2 py-0.5">{info.label}</span>
+          {project.nda && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 px-2 py-0.5 text-amber-300">
+              <Lock className="size-3" /> NDA
+            </span>
+          )}
+          {project.publicView && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-neon/40 px-2 py-0.5 text-neon">
+              <Globe className="size-3" /> Público
+            </span>
+          )}
+          {project.status === "CLOSED" && (
+            <span className="rounded-full border border-border px-2 py-0.5 text-muted-foreground">
+              Encerrado
+            </span>
+          )}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Diretor do projeto: <span className="text-foreground">{director}</span>
+        </p>
       </div>
     </>
   );
 
-  // Quem participa abre o projeto; visitantes abrem a visão pública, se o projeto for público.
+  const className =
+    "block overflow-hidden rounded-2xl border border-border transition-colors hover:bg-white/[0.03]";
   if (!me && project.publicView && project.id !== null) {
     return (
       <Link
         to="/projetos/$projectId/publico"
         params={{ projectId: String(project.id) }}
-        className="glass glass-hover block rounded-2xl p-4"
+        className={className}
       >
         {body}
       </Link>
     );
   }
-  return me && project.id !== null ? (
-    <Link
-      to="/projetos/$projectId"
-      params={{ projectId: String(project.id) }}
-      className="glass glass-hover block rounded-2xl p-4"
-    >
-      {body}
-    </Link>
-  ) : (
-    <div className="glass rounded-2xl p-4">{body}</div>
-  );
+  if (me && project.id !== null) {
+    return (
+      <Link
+        to="/projetos/$projectId"
+        params={{ projectId: String(project.id) }}
+        className={className}
+      >
+        {body}
+      </Link>
+    );
+  }
+  return <div className="overflow-hidden rounded-2xl border border-border">{body}</div>;
 }
-
 
 /** Primeiros passos para conta nova: some sozinho quando tudo estiver feito. */
 function FirstSteps({ profile, onPublish }: { profile: Profile; onPublish: () => void }) {
@@ -519,12 +667,16 @@ function FirstSteps({ profile, onPublish }: { profile: Profile; onPublish: () =>
             <span
               aria-hidden="true"
               className={`flex size-5 items-center justify-center rounded-full border ${
-                step.done ? "border-emerald-500 bg-emerald-500/20 text-emerald-300" : "border-border"
+                step.done
+                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                  : "border-border"
               }`}
             >
               {step.done && <Check className="size-3" />}
             </span>
-            <span className={step.done ? "text-muted-foreground line-through" : ""}>{step.label}</span>
+            <span className={step.done ? "text-muted-foreground line-through" : ""}>
+              {step.label}
+            </span>
             {!step.done && <span className="ml-auto">{step.action}</span>}
             <span className="sr-only">{step.done ? "(feito)" : "(pendente)"}</span>
           </li>

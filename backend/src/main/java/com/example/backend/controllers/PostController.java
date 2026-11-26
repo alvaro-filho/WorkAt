@@ -43,18 +43,39 @@ public class PostController {
     // O caminho antigo da vitrine continua respondendo: é o health check do Render (render.yaml).
     @GetMapping({"/api/v1/feed", "/api/v1/showcase/public"})
     public List<PostResponse> feed(@RequestParam(required = false) Long before,
-                                   @RequestParam(required = false) Integer limit) {
-        return postService.feed(before, limit);
+                                   @RequestParam(required = false) Integer limit,
+                                   Authentication authentication) {
+        return postService.feed(before, limit, optionalUser(authentication));
+    }
+
+    /** Curtir, republicar ou salvar (PUT liga, DELETE desliga). tipo: like, repost ou save. */
+    @org.springframework.web.bind.annotation.PutMapping("/api/v1/posts/{postId}/reactions/{type}")
+    public PostResponse react(@PathVariable Long postId, @PathVariable String type, Authentication authentication) {
+        return postService.react(postId, requireUser(authentication), reactionType(type), true);
+    }
+
+    @DeleteMapping("/api/v1/posts/{postId}/reactions/{type}")
+    public PostResponse unreact(@PathVariable Long postId, @PathVariable String type, Authentication authentication) {
+        return postService.react(postId, requireUser(authentication), reactionType(type), false);
+    }
+
+    private static com.example.backend.models.PostReaction.Type reactionType(String value) {
+        return switch (value == null ? "" : value.toLowerCase()) {
+            case "like" -> com.example.backend.models.PostReaction.Type.LIKE;
+            case "repost" -> com.example.backend.models.PostReaction.Type.REPOST;
+            case "save" -> com.example.backend.models.PostReaction.Type.SAVE;
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reação inválida (use like, repost ou save).");
+        };
     }
 
     @PostMapping(value = "/api/v1/posts", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<PostResponse> create(@RequestParam("file") MultipartFile file,
+    public ResponseEntity<PostResponse> create(@RequestParam("file") List<MultipartFile> files,
                                                @RequestParam(value = "title", required = false) String title,
                                                @RequestParam(value = "subtitle", required = false) String subtitle,
                                                Authentication authentication) {
         User user = requireUser(authentication);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(postService.toResponse(createWithinQuota(user, file, title, subtitle)));
+                .body(postService.toResponse(createWithinQuota(user, files, title, subtitle), user));
     }
 
     @PostMapping("/api/v1/files/{fileId}/post")
@@ -64,7 +85,7 @@ public class PostController {
         User user = requireUser(authentication);
         Map<String, String> fields = body == null ? Map.of() : body;
         return ResponseEntity.status(HttpStatus.CREATED).body(postService.toResponse(
-                postService.publishTaskFile(fileId, user, fields.get("title"), fields.get("subtitle"))));
+                postService.publishTaskFile(fileId, user, fields.get("title"), fields.get("subtitle")), user));
     }
 
     @GetMapping("/api/v1/posts/{postId}")
@@ -78,7 +99,7 @@ public class PostController {
                                Authentication authentication) {
         User user = requireUser(authentication);
         return postService.toResponse(postService.update(postId, user, request.getTitle(), request.getSubtitle(),
-                request.getHiddenFromPortfolio()));
+                request.getHiddenFromPortfolio()), user);
     }
 
     @DeleteMapping("/api/v1/posts/{postId}")
@@ -116,11 +137,12 @@ public class PostController {
     }
 
     /** Post avulso também conta na cota de espaço da pessoa. */
-    private com.example.backend.models.Post createWithinQuota(User user, org.springframework.web.multipart.MultipartFile file,
+    private com.example.backend.models.Post createWithinQuota(User user, List<MultipartFile> files,
                                                               String title, String subtitle) {
-        if (taskFileService != null && file != null) {
-            taskFileService.ensureQuota(user, file.getSize());
+        if (taskFileService != null && files != null) {
+            taskFileService.ensureQuota(user, files.stream().filter(java.util.Objects::nonNull)
+                    .mapToLong(MultipartFile::getSize).sum());
         }
-        return postService.createStandalone(user, file, title, subtitle);
+        return postService.createStandalone(user, files, title, subtitle);
     }
 }

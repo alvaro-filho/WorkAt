@@ -13,6 +13,7 @@ public record WorkEvent(Type type, Project project, Task task, User actor, User 
     public enum Type {
         INVITE_SENT,
         INVITE_CANCELLED,
+        INVITE_DECLINED,
         MEMBER_JOINED,
         MEMBER_LEFT,
         MEMBER_REMOVED,

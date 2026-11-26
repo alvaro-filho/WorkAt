@@ -51,7 +51,10 @@ public class WorkEventListener {
         String project = p == null ? "" : p.getName();
         String task = t == null ? "" : "“" + t.getTitle() + "”";
         switch (e.type()) {
-            case INVITE_SENT -> send(e.target(), e, actor + " convidou você para o projeto " + project + ".", "/projetos", null);
+            case INVITE_SENT -> send(e.target(), e, actor + " convidou você para o projeto " + project + ".",
+                    "/notificacoes?aba=convites", null);
+            case INVITE_DECLINED -> send(e.target(), e, actor + " recusou o convite para o projeto " + project + ".",
+                    projectLink(p), null);
             case MEMBER_JOINED -> send(owner(p), e, actor + " entrou no projeto " + project + ".", projectLink(p), null);
             case MEMBER_LEFT -> send(owner(p), e, actor + " saiu do projeto " + project
                     + ". As tarefas dessa pessoa ficaram sem responsável.", projectLink(p), null);
@@ -102,6 +105,7 @@ public class WorkEventListener {
         return switch (e.type()) {
             case INVITE_SENT -> actor + " convidou " + target + ".";
             case INVITE_CANCELLED -> actor + " cancelou o convite de " + target + ".";
+            case INVITE_DECLINED -> actor + " recusou o convite.";
             case MEMBER_JOINED -> actor + " entrou no projeto.";
             case MEMBER_LEFT -> actor + " saiu do projeto.";
             case MEMBER_REMOVED -> actor + " removeu " + target + " do projeto.";

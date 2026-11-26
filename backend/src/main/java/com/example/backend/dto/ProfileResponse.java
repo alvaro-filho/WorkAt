@@ -21,8 +21,15 @@ public record ProfileResponse(
         String bio,
         List<String> specialties,
         List<String> links,
-        String bannerUrl
+        String bannerUrl,
+        /** Publicações que a pessoa republicou (aparecem na aba Posts com "republicou"). */
+        List<Repost> reposts,
+        /** Itens salvos: só a própria pessoa vê; para os outros vem vazio. */
+        List<PostResponse> saved
 ) {
+    public record Repost(PostResponse post, LocalDateTime repostedAt) {
+    }
+
     public static List<String> split(String text, String separator) {
         if (text == null || text.isBlank()) {
             return List.of();
@@ -45,10 +52,12 @@ public record ProfileResponse(
             String ownerName,
             /** Projeto público (WIP automático): aparece no portfólio e tem visão pública. */
             boolean publicView,
-            String coverUrl
+            String coverUrl,
+            /** Publicação pública mais recente do projeto (ordena o portfólio). */
+            LocalDateTime lastActivityAt
     ) {
         public static ProfileProject masked(ProjectType type, ProjectRole role, ProjectStatus status, String ownerName) {
-            return new ProfileProject(null, null, null, type, role, status, true, true, ownerName, false, null);
+            return new ProfileProject(null, null, null, type, role, status, true, true, ownerName, false, null, null);
         }
     }
 }

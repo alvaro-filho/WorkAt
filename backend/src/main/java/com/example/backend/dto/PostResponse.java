@@ -24,7 +24,13 @@ public record PostResponse(
         List<ImageRef> images,
         boolean hiddenFromPortfolio,
         boolean isPublic,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        long likeCount,
+        long repostCount,
+        /** Reações de quem está vendo (falso para visitante sem login). */
+        boolean liked,
+        boolean reposted,
+        boolean saved
 ) {
     public record ProjectRef(Long id, String name, ProjectType type) {
     }

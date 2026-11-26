@@ -5,6 +5,8 @@ import { CalendarDays, Check, FolderKanban, Globe, Link2, Lock, Trash2 } from "l
 import { ArtImage } from "@/components/art/ArtPieces";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
+import { Lightbox } from "@/components/posts/Lightbox";
+import { PostActions } from "@/components/posts/PostActions";
 import { relativeTime, UserAvatar } from "@/components/posts/PostCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,7 @@ function PostPage() {
   const [copied, setCopied] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [viewing, setViewing] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -53,15 +56,19 @@ function PostPage() {
         // "Mais de": outras publicações da mesma pessoa que o visitante pode ver.
         api
           .profile(loaded.author.username)
-          .then((profile) =>
-            active &&
-            setMore(profile.posts.filter((p) => p.id !== loaded.id && p.images.length > 0).slice(0, 9)),
+          .then(
+            (profile) =>
+              active &&
+              setMore(
+                profile.posts.filter((p) => p.id !== loaded.id && p.images.length > 0).slice(0, 9),
+              ),
           )
           .catch(() => undefined);
       })
       .catch((e: unknown) => {
         if (!active) return;
-        if (e instanceof ApiError && (e.status === 404 || e.status === 403 || e.status === 401)) setNotFound(true);
+        if (e instanceof ApiError && (e.status === 404 || e.status === 403 || e.status === 401))
+          setNotFound(true);
         else setError(e instanceof Error ? e.message : "Não foi possível carregar a publicação.");
       });
     return () => {
@@ -118,26 +125,37 @@ function PostPage() {
   }
 
   const mine = user?.username === post.author.username;
-  const title = post.title ?? (post.kind === "PROJECT_PUBLISHED" ? post.project?.name : null) ?? "Sem título";
+  const title =
+    post.title ?? (post.kind === "PROJECT_PUBLISHED" ? post.project?.name : null) ?? "Sem título";
   const created = new Date(post.createdAt);
 
   return (
     <AppLayout title={title} subtitle={`por ${post.author.fullName}`} back wide>
       <div className="grid lg:grid-cols-[minmax(0,1fr)_380px]">
-        <section aria-label="Imagens" className="space-y-2 bg-black/50 p-2 sm:p-4 lg:min-h-[calc(100vh-53px)]">
+        <section
+          aria-label="Imagens"
+          className="space-y-2 bg-black/50 p-2 sm:p-4 lg:min-h-[calc(100vh-53px)]"
+        >
           {post.images.length === 0 ? (
             <div className="flex h-80 items-center justify-center text-sm text-muted-foreground">
               Esta publicação não tem imagens.
             </div>
           ) : (
             post.images.map((image, index) => (
-              <div key={image.id} className="flex justify-center">
+              <button
+                key={image.id}
+                type="button"
+                onClick={() => setViewing(index)}
+                aria-label={`Ver em tela cheia: ${title} (${index + 1} de ${post.images.length})`}
+                title="Ver em tela cheia"
+                className="flex w-full cursor-zoom-in justify-center focus-visible:outline-2 focus-visible:outline-primary"
+              >
                 <ArtImage
                   src={image.url}
                   title={`${title} (${index + 1} de ${post.images.length})`}
                   className="h-auto max-h-[88vh] w-full object-contain"
                 />
-              </div>
+              </button>
             ))
           )}
         </section>
@@ -145,7 +163,11 @@ function PostPage() {
         <aside className="border-border lg:border-l">
           <div className="space-y-5 p-5 lg:sticky lg:top-[53px]">
             <div className="flex items-center gap-3">
-              <Link to="/u/$username" params={{ username: post.author.username }} aria-label={`Perfil de ${post.author.fullName}`}>
+              <Link
+                to="/u/$username"
+                params={{ username: post.author.username }}
+                aria-label={`Perfil de ${post.author.fullName}`}
+              >
                 <UserAvatar name={post.author.fullName} src={post.author.avatarUrl} size="md" />
               </Link>
               <div className="min-w-0 flex-1">
@@ -177,7 +199,11 @@ function PostPage() {
                 )}
               </div>
               <h2 className="text-2xl leading-tight font-bold">{title}</h2>
-              {post.subtitle && <p className="mt-2 text-sm whitespace-pre-wrap text-muted-foreground">{post.subtitle}</p>}
+              {post.subtitle && (
+                <p className="mt-2 text-sm whitespace-pre-wrap text-muted-foreground">
+                  {post.subtitle}
+                </p>
+              )}
             </div>
 
             {post.project && (
@@ -186,7 +212,8 @@ function PostPage() {
                   <FolderKanban className="size-4 text-primary" />
                   {post.task ? (
                     <span className="min-w-0 truncate">
-                      {post.task.title} <span className="text-muted-foreground">em</span> {post.project.name}
+                      {post.task.title} <span className="text-muted-foreground">em</span>{" "}
+                      {post.project.name}
                     </span>
                   ) : (
                     <span className="truncate">{post.project.name}</span>
@@ -205,10 +232,18 @@ function PostPage() {
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <CalendarDays className="size-4" />
               <time dateTime={post.createdAt} title={created.toLocaleString("pt-BR")}>
-                {created.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })} ·{" "}
-                {relativeTime(post.createdAt, Date.now())}
+                {created.toLocaleDateString("pt-BR", {
+                  day: "2-digit",
+                  month: "long",
+                  year: "numeric",
+                })}{" "}
+                · {relativeTime(post.createdAt, Date.now())}
               </time>
             </p>
+
+            <div className="border-y border-border py-1">
+              <PostActions post={post} onChange={setPost} size="lg" />
+            </div>
 
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" className="rounded-full" onClick={() => void share()}>
@@ -263,6 +298,15 @@ function PostPage() {
           </div>
         </aside>
       </div>
+      <Lightbox
+        images={post.images.map((image, index) => ({
+          url: image.url,
+          alt: `${title} (${index + 1} de ${post.images.length})`,
+        }))}
+        index={viewing}
+        onIndexChange={setViewing}
+        onClose={() => setViewing(null)}
+      />
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}

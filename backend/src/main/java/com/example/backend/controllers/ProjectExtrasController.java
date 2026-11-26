@@ -67,6 +67,17 @@ public class ProjectExtrasController {
         return ProjectResponse.from(project, user);
     }
 
+    public record CoverRequest(Long fileId) {
+    }
+
+    /** O diretor escolhe a capa do projeto (fileId null = imagem mais recente). */
+    @org.springframework.web.bind.annotation.PutMapping("/api/v1/projects/{projectId}/cover")
+    public ProjectResponse cover(@PathVariable Long projectId, @RequestBody(required = false) CoverRequest request,
+                                 Authentication authentication) {
+        User user = currentUser.require(authentication);
+        return ProjectResponse.from(extras.setCover(projectId, user, request == null ? null : request.fileId()), user);
+    }
+
     @DeleteMapping("/api/v1/projects/{projectId}/invitations/{invitationId}")
     public ResponseEntity<Void> cancelInvitation(@PathVariable Long projectId, @PathVariable Long invitationId,
                                                  Authentication authentication) {

@@ -75,6 +75,12 @@ public class TaskFileController {
         return ResponseEntity.ok(TaskFileResponse.from(taskFileService.markAsFinal(fileId, user)));
     }
 
+    @DeleteMapping("/api/v1/files/{fileId}/final")
+    public ResponseEntity<TaskFileResponse> unmarkFinal(@PathVariable Long fileId, Authentication authentication) {
+        User user = findAuthenticatedUser(authentication);
+        return ResponseEntity.ok(TaskFileResponse.from(taskFileService.unmarkFinal(fileId, user)));
+    }
+
     @DeleteMapping("/api/v1/files/{fileId}")
     public ResponseEntity<Void> delete(@PathVariable Long fileId, Authentication authentication) {
         User user = findAuthenticatedUser(authentication);

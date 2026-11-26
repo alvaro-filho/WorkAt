@@ -22,6 +22,8 @@ public record PublicProjectResponse(
         /** Falso quando quem vê é participante pré-visualizando um projeto ainda privado. */
         boolean isPublic,
         boolean viewerParticipates,
+        /** Arquivo usado como capa (escolhido pelo diretor); null = a imagem mais recente. */
+        Long coverFileId,
         List<Update> updates
 ) {
     public record Update(

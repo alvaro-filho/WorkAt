@@ -99,6 +99,46 @@ export interface Post {
   /** Falso quando só o autor e quem participa do projeto conseguem ver. */
   isPublic: boolean;
   createdAt: string;
+  likeCount: number;
+  repostCount: number;
+  /** Reações de quem está vendo (sempre falso sem login). */
+  liked: boolean;
+  reposted: boolean;
+  saved: boolean;
+}
+
+export type ReactionType = "like" | "repost" | "save";
+
+/** Projeto na tela Projetos, com o resumo do que está acontecendo (só tarefas que a pessoa vê). */
+export interface ProjectOverview {
+  project: Project;
+  taskTotal: number;
+  taskDone: number;
+  taskInReview: number;
+  overdue: number;
+  /** Tarefas abertas com quem está vendo. */
+  mine: number;
+  memberCount: number;
+  /** Até 5 pessoas, diretor primeiro. */
+  people: UserSummary[];
+  /** Arquivo de imagem para a capa (baixado com login). */
+  coverFileId: number | null;
+  lastActivityAt: string | null;
+}
+
+/** Post avulso: até 6 imagens. Projetos não têm limite (cada etapa fica registrada). */
+export const MAX_POST_IMAGES = 6;
+
+/** Projeto aberto ao público, na aba Projetos do Explorar. */
+export interface PublicProjectCard {
+  id: number;
+  name: string;
+  description: string | null;
+  type: ProjectType;
+  director: UserSummary | null;
+  coverUrl: string | null;
+  imageCount: number;
+  lastActivityAt: string | null;
 }
 
 /** Visão pública do projeto: cada tarefa vira título, subtítulo e imagens. */
@@ -113,6 +153,8 @@ export interface PublicProject {
   publicSince: string | null;
   isPublic: boolean;
   viewerParticipates: boolean;
+  /** Arquivo escolhido como capa pelo diretor; null = imagem mais recente. */
+  coverFileId: number | null;
   updates: {
     taskId: number;
     title: string;
@@ -138,6 +180,8 @@ export interface ProfileProject {
   /** Projeto público: aparece no portfólio e tem visão pública. */
   publicView: boolean;
   coverUrl: string | null;
+  /** Publicação pública mais recente do projeto (ordena o portfólio). */
+  lastActivityAt: string | null;
 }
 
 export interface Profile {
@@ -156,6 +200,10 @@ export interface Profile {
   links: string[];
   /** Capa do perfil (null = degradê padrão). */
   bannerUrl: string | null;
+  /** Publicações que a pessoa republicou. */
+  reposts: { post: Post; repostedAt: string }[];
+  /** Itens salvos (só a própria pessoa recebe). */
+  saved: Post[];
 }
 
 export type ApiTaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE";
@@ -230,6 +278,11 @@ export interface Account {
   storageUsedBytes: number;
   storageQuotaBytes: number;
   bannerUrl: string | null;
+  /** Último enquadramento escolhido (JSON com centro e zoom), para reabrir o editor no mesmo lugar. */
+  avatarCrop: string | null;
+  bannerCrop: string | null;
+  /** Outras pessoas podem convidar pelo @usuário (além do e-mail). */
+  inviteByUsername: boolean;
 }
 
 /** Texto do backend que não serve para quem usa o site vira uma frase clara, pelo código HTTP. */
@@ -472,6 +525,9 @@ export const api = {
     request<TaskFile[]>(`/tasks/${taskId}/files`, {}, { authFailure: "verify-session" }),
   markFinalFile: (fileId: number) =>
     request<TaskFile>(`/files/${fileId}/final`, { method: "POST" }),
+  /** Tira a marca de imagem final (a tarefa fica sem imagem final). */
+  unmarkFinalFile: (fileId: number) =>
+    request<TaskFile>(`/files/${fileId}/final`, { method: "DELETE" }),
   deleteFile: (fileId: number) => request<void>(`/files/${fileId}`, { method: "DELETE" }),
   updateProjectSettings: (
     projectId: number,
@@ -516,6 +572,8 @@ export const api = {
       { authFailure: "verify-session" },
     ),
   myInvitations: () => request<ProjectInvitation[]>("/invitations"),
+  /** Tela Projetos: cada projeto com progresso, atrasos, equipe e capa. */
+  projectsOverview: () => request<ProjectOverview[]>("/projects/overview"),
   acceptInvitation: (invitationId: number) =>
     request<ProjectInvitation>(`/invitations/${invitationId}/accept`, { method: "POST" }),
   declineInvitation: (invitationId: number) =>
@@ -550,11 +608,12 @@ export const api = {
         ...(limit ? { limit: String(limit) } : {}),
       }).toString()}`,
       { method: "GET" },
-      { authFailure: "ignore", sendAuthorization: false },
+      { authFailure: "ignore" },
     ),
-  createPost: (file: File, title?: string, subtitle?: string) => {
+  /** Post avulso com 1 a 6 imagens. */
+  createPost: (files: File[], title?: string, subtitle?: string) => {
     const form = new FormData();
-    form.append("file", file);
+    files.forEach((file) => form.append("file", file));
     if (title?.trim()) form.append("title", title.trim());
     if (subtitle?.trim()) form.append("subtitle", subtitle.trim());
     return request<Post>("/posts", { method: "POST", body: form });
@@ -569,6 +628,22 @@ export const api = {
   /** Uma publicação (pública para quem não tem login, se ela for pública). */
   post: (postId: number) => request<Post>(`/posts/${postId}`, {}, { authFailure: "ignore" }),
   deletePost: (postId: number) => request<void>(`/posts/${postId}`, { method: "DELETE" }),
+  /** Curtir, republicar ou salvar (on = true liga, false desliga). Devolve a publicação atualizada. */
+  react: (postId: number, type: ReactionType, on: boolean) =>
+    request<Post>(`/posts/${postId}/reactions/${type}`, { method: on ? "PUT" : "DELETE" }),
+  /** Aba Projetos do Explorar. */
+  exploreProjects: () =>
+    request<PublicProjectCard[]>(
+      "/explore/projects",
+      {},
+      { authFailure: "ignore", sendAuthorization: false },
+    ),
+  /** O diretor escolhe a capa do projeto (null = imagem mais recente). */
+  setProjectCover: (projectId: number, fileId: number | null) =>
+    request<Project>(`/projects/${projectId}/cover`, {
+      method: "PUT",
+      body: JSON.stringify({ fileId }),
+    }),
   // ---- Fluxo de trabalho ----
   myTasks: () => request<ApiTask[]>("/me/tasks"),
   reviewTask: (taskId: number, decision: "APPROVE" | "REQUEST_CHANGES", note?: string) =>
@@ -583,16 +658,25 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ body, fileId: fileId ?? null }),
     }),
-  deleteComment: (commentId: number) => request<void>(`/comments/${commentId}`, { method: "DELETE" }),
+  deleteComment: (commentId: number) =>
+    request<void>(`/comments/${commentId}`, { method: "DELETE" }),
   notifications: () =>
-    request<{ unread: number; items: AppNotification[] }>("/notifications", {}, { authFailure: "verify-session" }),
+    request<{ unread: number; items: AppNotification[] }>(
+      "/notifications",
+      {},
+      { authFailure: "verify-session" },
+    ),
   unreadNotifications: () =>
     request<{ unread: number }>("/notifications/unread-count", {}, { authFailure: "ignore" }),
   readNotification: (id: number) =>
     request<AppNotification>(`/notifications/${id}/read`, { method: "POST" }),
   readAllNotifications: () => request<void>("/notifications/read-all", { method: "POST" }),
   projectHistory: (projectId: number) =>
-    request<HistoryEntry[]>(`/projects/${projectId}/history`, {}, { authFailure: "verify-session" }),
+    request<HistoryEntry[]>(
+      `/projects/${projectId}/history`,
+      {},
+      { authFailure: "verify-session" },
+    ),
   transferProject: (projectId: number, userId: number) =>
     request<Project>(`/projects/${projectId}/transfer`, {
       method: "POST",
@@ -609,18 +693,26 @@ export const api = {
     specialties?: string[];
     links?: string[];
   }) => request<Account>("/me/profile", { method: "PATCH", body: JSON.stringify(payload) }),
-  uploadAvatar: (file: File) => {
+  /** Foto recortada; original e crop guardam a imagem inteira e o enquadramento para reajustar depois. */
+  uploadAvatar: (file: File, original?: File, crop?: string) => {
     const form = new FormData();
     form.append("file", file);
+    if (original) form.append("original", original);
+    if (crop) form.append("crop", crop);
     return request<Account>("/me/avatar", { method: "POST", body: form });
   },
   removeAvatar: () => request<Account>("/me/avatar", { method: "DELETE" }),
-  uploadBanner: (file: File) => {
+  uploadBanner: (file: File, original?: File, crop?: string) => {
     const form = new FormData();
     form.append("file", file);
+    if (original) form.append("original", original);
+    if (crop) form.append("crop", crop);
     return request<Account>("/me/banner", { method: "POST", body: form });
   },
   removeBanner: () => request<Account>("/me/banner", { method: "DELETE" }),
+  /** Aba Permissões: aceitar convites pelo @usuário ou só pelo e-mail. */
+  updatePermissions: (payload: { inviteByUsername: boolean }) =>
+    request<Account>("/me/permissions", { method: "PATCH", body: JSON.stringify(payload) }),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ message: string }>("/me/password", {
       method: "POST",
@@ -689,6 +781,17 @@ export function uploadTaskFile(
   });
 }
 
+/** Imagem original da própria foto ou capa (para reajustar o enquadramento). */
+export async function fetchProfileOriginal(kind: "avatar" | "banner"): Promise<Blob> {
+  const token = window.localStorage.getItem("authToken");
+  const response = await fetch(`/api/v1/me/${kind}/original`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok)
+    throw new ApiError(`Não foi possível abrir a imagem (${response.status}).`, response.status);
+  return response.blob();
+}
+
 /** Baixa o conteúdo de um arquivo com o token (não existe link público para arquivo privado). */
 export async function fetchFileBlob(fileId: number): Promise<Blob> {
   const token = window.localStorage.getItem("authToken");
@@ -708,7 +811,9 @@ export async function downloadWithAuth(path: string, fallbackName: string): Prom
   const token = window.localStorage.getItem("authToken");
   let response: Response;
   try {
-    response = await fetch(`/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    response = await fetch(`/api/v1${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
   } catch {
     throw new ApiError(friendlyError(0, null), 0);
   }

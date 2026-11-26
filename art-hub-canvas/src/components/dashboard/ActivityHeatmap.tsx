@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 const WEEKS = 26;
 const DAYS = 7;
@@ -24,7 +24,14 @@ function dateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export function ActivityHeatmap({ data }: { data: Record<string, number> }) {
+/** variant="inline": sem cartão, para ficar no cabeçalho do perfil, logo abaixo do nome. */
+export function ActivityHeatmap({
+  data,
+  variant = "card",
+}: {
+  data: Record<string, number>;
+  variant?: "card" | "inline";
+}) {
   const cells = useMemo(() => {
     const counts = Object.values(data);
     const maxCount = Math.max(0, ...counts);
@@ -43,13 +50,31 @@ export function ActivityHeatmap({ data }: { data: Record<string, number> }) {
     return out;
   }, [data]);
 
+  const total = cells.reduce((sum, cell) => sum + cell.count, 0);
+  // Em tela estreita o gráfico rola para os lados: começa mostrando o mês atual (o mais recente).
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = scroller.current;
+    if (node) node.scrollLeft = node.scrollWidth;
+  }, [cells]);
+  const inline = variant === "inline";
+
   return (
-    <div className="glass rounded-2xl p-5">
+    <div className={inline ? "" : "glass rounded-2xl p-5"}>
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold">Atividade de produção</h2>
-          <p className="text-xs text-muted-foreground">Contribuições diárias nos últimos 6 meses</p>
-        </div>
+        {inline ? (
+          <p className="text-[13px] text-muted-foreground">
+            <span className="font-semibold text-foreground">{total}</span>{" "}
+            {total === 1 ? "atividade" : "atividades"} de produção nos últimos 6 meses
+          </p>
+        ) : (
+          <div>
+            <h2 className="text-sm font-semibold">Atividade de produção</h2>
+            <p className="text-xs text-muted-foreground">
+              Contribuições diárias nos últimos 6 meses
+            </p>
+          </div>
+        )}
         <div className="hidden items-center gap-1 sm:flex">
           <span className="mr-1 text-xs text-muted-foreground">Menos</span>
           {[0, 1, 2, 3, 4].map((l) => (
@@ -59,7 +84,7 @@ export function ActivityHeatmap({ data }: { data: Record<string, number> }) {
         </div>
       </div>
 
-      <div className="mt-4 overflow-x-auto pb-1">
+      <div ref={scroller} className={`${inline ? "mt-2" : "mt-4"} overflow-x-auto pb-1`}>
         <div className="flex gap-1">
           {Array.from({ length: WEEKS }).map((_, w) => (
             <div key={w} className="flex flex-col gap-1">

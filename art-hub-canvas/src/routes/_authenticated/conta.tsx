@@ -1,7 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ChevronRight, Download, HardDrive, ImagePlus, KeyRound, ShieldAlert, Trash2, UserRound, type LucideIcon } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronRight,
+  Crop as CropIcon,
+  Download,
+  HardDrive,
+  ImagePlus,
+  KeyRound,
+  ShieldAlert,
+  Trash2,
+  UserPlus,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 
+import { ImageCropDialog, parseCrop, type Crop } from "@/components/account/ImageCropDialog";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
 import { UserAvatar } from "@/components/posts/PostCard";
@@ -10,7 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
-import { api, downloadWithAuth, type Account } from "@/lib/api";
+import { api, downloadWithAuth, fetchProfileOriginal, type Account } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 
 export const Route = createFileRoute("/_authenticated/conta")({
@@ -22,7 +36,15 @@ function megabytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 }
 
-function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="space-y-5 px-4 pb-8">
       <div className="pt-1">
@@ -34,12 +56,38 @@ function Section({ title, description, children }: { title: string; description?
   );
 }
 
-type SectionId = "perfil" | "espaco" | "senha" | "dados";
+type SectionId = "perfil" | "permissoes" | "espaco" | "senha" | "dados";
 const SECTIONS: { id: SectionId; label: string; hint: string; icon: LucideIcon }[] = [
-  { id: "perfil", label: "Perfil público", hint: "Foto, capa, nome, bio, especialidades e links.", icon: UserRound },
-  { id: "espaco", label: "Espaço usado", hint: "Quanto os seus arquivos ocupam da sua cota.", icon: HardDrive },
-  { id: "senha", label: "Altere sua senha", hint: "Troque a senha a qualquer momento.", icon: KeyRound },
-  { id: "dados", label: "Seus dados e a conta", hint: "Baixe uma cópia dos seus dados ou exclua a conta.", icon: ShieldAlert },
+  {
+    id: "perfil",
+    label: "Perfil público",
+    hint: "Foto, capa, nome, bio, especialidades e links.",
+    icon: UserRound,
+  },
+  {
+    id: "permissoes",
+    label: "Permissões",
+    hint: "Como outras pessoas podem convidar você para projetos.",
+    icon: UserPlus,
+  },
+  {
+    id: "espaco",
+    label: "Espaço usado",
+    hint: "Quanto os seus arquivos ocupam da sua cota.",
+    icon: HardDrive,
+  },
+  {
+    id: "senha",
+    label: "Altere sua senha",
+    hint: "Troque a senha a qualquer momento.",
+    icon: KeyRound,
+  },
+  {
+    id: "dados",
+    label: "Seus dados e a conta",
+    hint: "Baixe uma cópia dos seus dados ou exclua a conta.",
+    icon: ShieldAlert,
+  },
 ];
 
 function Feedback({ ok, error }: { ok: string | null; error: string | null }) {
@@ -71,7 +119,9 @@ function AccountPage() {
     api
       .me()
       .then(setAccount)
-      .catch((e) => setLoadError(e instanceof Error ? e.message : "Não foi possível carregar a conta."));
+      .catch((e) =>
+        setLoadError(e instanceof Error ? e.message : "Não foi possível carregar a conta."),
+      );
   }, []);
 
   const applyAccount = (next: Account) => {
@@ -95,7 +145,12 @@ function AccountPage() {
     );
 
   return (
-    <AppLayout title="Minha conta" subtitle={`@${account.username} · ${account.email}`} layout="wide" flush>
+    <AppLayout
+      title="Minha conta"
+      subtitle={`@${account.username} · ${account.email}`}
+      layout="wide"
+      flush
+    >
       <div className="flex min-h-[calc(100vh-53px)]">
         {/* Lista de seções (no celular some quando uma seção está aberta) */}
         <nav
@@ -143,7 +198,12 @@ function AccountPage() {
               {SECTIONS.find((item) => item.id === (section ?? "perfil"))!.label}
             </h2>
           </div>
-          {(section ?? "perfil") === "perfil" && <ProfileSection account={account} onSaved={applyAccount} />}
+          {(section ?? "perfil") === "perfil" && (
+            <ProfileSection account={account} onSaved={applyAccount} />
+          )}
+          {section === "permissoes" && (
+            <PermissionsSection account={account} onSaved={applyAccount} />
+          )}
           {section === "espaco" && <StorageSection account={account} />}
           {section === "senha" && <PasswordSection />}
           {section === "dados" && (
@@ -170,6 +230,39 @@ function ProfileSection({ account, onSaved }: { account: Account; onSaved: (a: A
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const bannerInput = useRef<HTMLInputElement>(null);
+  // Editor de enquadramento aberto: qual imagem, de onde e o enquadramento anterior.
+  const [editor, setEditor] = useState<{
+    kind: "avatar" | "banner";
+    source: Blob;
+    initial: Crop | null;
+  } | null>(null);
+
+  const adjust = async (kind: "avatar" | "banner") => {
+    setError(null);
+    try {
+      const source = await fetchProfileOriginal(kind);
+      setEditor({
+        kind,
+        source,
+        initial: parseCrop(kind === "avatar" ? account.avatarCrop : account.bannerCrop),
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível abrir a imagem.");
+    }
+  };
+
+  const saveCrop = async (cropped: File, crop: Crop, original: File) => {
+    if (!editor) return;
+    const kind = editor.kind;
+    await run(
+      () =>
+        kind === "avatar"
+          ? api.uploadAvatar(cropped, original, JSON.stringify(crop))
+          : api.uploadBanner(cropped, original, JSON.stringify(crop)),
+      kind === "avatar" ? "Foto atualizada." : "Capa atualizada.",
+    );
+    setEditor(null);
+  };
 
   const run = async (action: () => Promise<Account>, message: string) => {
     setBusy(true);
@@ -192,19 +285,30 @@ function ProfileSection({ account, onSaved }: { account: Account; onSaved: (a: A
         api.updateProfile({
           fullName,
           bio,
-          specialties: specialties.split(",").map((s) => s.trim()).filter(Boolean),
-          links: links.split("\n").map((s) => s.trim()).filter(Boolean),
+          specialties: specialties
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          links: links
+            .split("\n")
+            .map((s) => s.trim())
+            .filter(Boolean),
         }),
       "Perfil salvo.",
     );
   };
 
   return (
-    <Section title="Perfil público" description="É o que aparece em /u/seu-usuario, para qualquer pessoa.">
+    <Section
+      title="Perfil público"
+      description="É o que aparece em /u/seu-usuario, para qualquer pessoa."
+    >
       <div className="space-y-2">
         <p className="text-sm font-medium">Capa</p>
         <div className="relative aspect-[3/1] w-full overflow-hidden rounded-xl bg-gradient-to-br from-primary/60 via-primary/20 to-neon/30">
-          {account.bannerUrl && <img src={account.bannerUrl} alt="" className="size-full object-cover" />}
+          {account.bannerUrl && (
+            <img src={account.bannerUrl} alt="" className="size-full object-cover" />
+          )}
         </div>
         <input
           ref={bannerInput}
@@ -214,19 +318,45 @@ function ProfileSection({ account, onSaved }: { account: Account; onSaved: (a: A
           onChange={(e) => {
             const file = e.target.files?.[0];
             e.target.value = "";
-            if (file) void run(() => api.uploadBanner(file), "Capa atualizada.");
+            if (file) setEditor({ kind: "banner", source: file, initial: null });
           }}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => bannerInput.current?.click()}>
-            <ImagePlus className="mr-1 size-4" /> {account.bannerUrl ? "Trocar capa" : "Enviar capa"}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => bannerInput.current?.click()}
+          >
+            <ImagePlus className="mr-1 size-4" />{" "}
+            {account.bannerUrl ? "Trocar capa" : "Enviar capa"}
           </Button>
           {account.bannerUrl && (
-            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void run(() => api.removeBanner(), "Capa removida.")}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => void adjust("banner")}
+            >
+              <CropIcon className="mr-1 size-4" /> Ajustar enquadramento
+            </Button>
+          )}
+          {account.bannerUrl && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() => void run(() => api.removeBanner(), "Capa removida.")}
+            >
               Remover
             </Button>
           )}
-          <span className="text-xs text-muted-foreground">Formato largo (3:1), PNG, JPG ou WEBP, até 8 MB.</span>
+          <span className="text-xs text-muted-foreground">
+            Formato largo (3:1), PNG, JPG ou WEBP, até 8 MB.
+          </span>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-4">
@@ -240,12 +370,30 @@ function ProfileSection({ account, onSaved }: { account: Account; onSaved: (a: A
             onChange={(e) => {
               const file = e.target.files?.[0];
               e.target.value = "";
-              if (file) void run(() => api.uploadAvatar(file), "Foto atualizada.");
+              if (file) setEditor({ kind: "avatar", source: file, initial: null });
             }}
           />
-          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => fileInput.current?.click()}>
-            <ImagePlus className="mr-1 size-4" /> {account.avatarUrl ? "Trocar foto" : "Enviar foto"}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => fileInput.current?.click()}
+          >
+            <ImagePlus className="mr-1 size-4" />{" "}
+            {account.avatarUrl ? "Trocar foto" : "Enviar foto"}
           </Button>
+          {account.avatarUrl && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => void adjust("avatar")}
+            >
+              <CropIcon className="mr-1 size-4" /> Ajustar enquadramento
+            </Button>
+          )}
           {account.avatarUrl && (
             <Button
               type="button"
@@ -260,10 +408,27 @@ function ProfileSection({ account, onSaved }: { account: Account; onSaved: (a: A
           <p className="w-full text-xs text-muted-foreground">PNG, JPG ou WEBP, até 5 MB.</p>
         </div>
       </div>
+      <ImageCropDialog
+        open={editor !== null}
+        onOpenChange={(open) => !open && setEditor(null)}
+        source={editor?.source ?? null}
+        aspect={editor?.kind === "banner" ? 3 : 1}
+        round={editor?.kind === "avatar"}
+        initial={editor?.initial ?? null}
+        outputWidth={editor?.kind === "banner" ? 1500 : 512}
+        title={editor?.kind === "banner" ? "Enquadrar a capa" : "Enquadrar a foto"}
+        busy={busy}
+        onConfirm={(cropped, crop, original) => void saveCrop(cropped, crop, original)}
+      />
       <form onSubmit={save} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="accName">Nome</Label>
-          <Input id="accName" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+          <Input
+            id="accName"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="accBio">Bio</Label>
@@ -291,16 +456,28 @@ function ProfileSection({ account, onSaved }: { account: Account; onSaved: (a: A
           <Textarea
             id="accLinks"
             value={links}
-            placeholder={"https://www.artstation.com/seu-usuario\nhttps://instagram.com/seu-usuario"}
+            placeholder={
+              "https://www.artstation.com/seu-usuario\nhttps://instagram.com/seu-usuario"
+            }
             onChange={(e) => setLinks(e.target.value)}
           />
-          <p className="text-xs text-muted-foreground">Um por linha, começando com https://. Até 5.</p>
+          <p className="text-xs text-muted-foreground">
+            Um por linha, começando com https://. Até 5.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={busy} className="gradient-primary text-primary-foreground">
+          <Button
+            type="submit"
+            disabled={busy}
+            className="gradient-primary text-primary-foreground"
+          >
             {busy ? "Salvando..." : "Salvar perfil"}
           </Button>
-          <Link to="/u/$username" params={{ username: account.username }} className="text-sm text-primary hover:underline">
+          <Link
+            to="/u/$username"
+            params={{ username: account.username }}
+            className="text-sm text-primary hover:underline"
+          >
             Ver meu perfil
           </Link>
         </div>
@@ -312,9 +489,13 @@ function ProfileSection({ account, onSaved }: { account: Account; onSaved: (a: A
 
 function StorageSection({ account }: { account: Account }) {
   const quota = account.storageQuotaBytes;
-  const percent = quota > 0 ? Math.min(100, Math.round((account.storageUsedBytes / quota) * 100)) : 0;
+  const percent =
+    quota > 0 ? Math.min(100, Math.round((account.storageUsedBytes / quota) * 100)) : 0;
   return (
-    <Section title="Espaço usado" description="Arquivos que você enviou em tarefas e imagens dos seus posts.">
+    <Section
+      title="Espaço usado"
+      description="Arquivos que você enviou em tarefas e imagens dos seus posts."
+    >
       {quota > 0 ? (
         <div className="space-y-2">
           <Progress value={percent} aria-label={`${percent}% do espaço usado`} />
@@ -323,7 +504,90 @@ function StorageSection({ account }: { account: Account }) {
           </p>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">{megabytes(account.storageUsedBytes)} usados, sem limite.</p>
+        <p className="text-sm text-muted-foreground">
+          {megabytes(account.storageUsedBytes)} usados, sem limite.
+        </p>
+      )}
+    </Section>
+  );
+}
+
+/** Permissões: aceitar convites pelo @usuário (além do e-mail) ou só pelo e-mail. */
+function PermissionsSection({
+  account,
+  onSaved,
+}: {
+  account: Account;
+  onSaved: (a: Account) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [ok, setOk] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const choose = async (inviteByUsername: boolean) => {
+    if (inviteByUsername === account.inviteByUsername) return;
+    setBusy(true);
+    setOk(null);
+    setError(null);
+    try {
+      onSaved(await api.updatePermissions({ inviteByUsername }));
+      setOk("Permissão salva.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível salvar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const options = [
+    {
+      value: true,
+      title: "Pelo e-mail ou pelo @usuário",
+      text: `Quem souber seu @${account.username} consegue te convidar, sem precisar do seu e-mail.`,
+    },
+    {
+      value: false,
+      title: "Só pelo e-mail",
+      text: "Só quem já tem o seu e-mail consegue te convidar. Convites pelo @ são recusados.",
+    },
+  ];
+
+  return (
+    <Section
+      title="Permissões"
+      description="Os convites chegam em Notificações › Convites, e você aceita ou recusa."
+    >
+      <fieldset className="space-y-2" disabled={busy}>
+        <legend className="mb-2 text-sm font-medium">Quem pode me convidar para projetos</legend>
+        {options.map((option) => {
+          const selected = account.inviteByUsername === option.value;
+          return (
+            <label
+              key={String(option.value)}
+              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${
+                selected ? "border-primary bg-primary/10" : "border-border hover:bg-white/5"
+              }`}
+            >
+              <input
+                type="radio"
+                name="inviteBy"
+                className="mt-1 accent-[var(--primary)]"
+                checked={selected}
+                onChange={() => void choose(option.value)}
+              />
+              <span>
+                <span className="block text-sm font-medium">{option.title}</span>
+                <span className="block text-[13px] text-muted-foreground">{option.text}</span>
+              </span>
+            </label>
+          );
+        })}
+      </fieldset>
+      {ok && <p className="text-sm text-emerald-400">{ok}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
       )}
     </Section>
   );
@@ -363,15 +627,36 @@ function PasswordSection() {
       <form onSubmit={submit} className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-2">
           <Label htmlFor="pwCurrent">Senha atual</Label>
-          <Input id="pwCurrent" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required />
+          <Input
+            id="pwCurrent"
+            type="password"
+            autoComplete="current-password"
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+            required
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="pwNew">Nova senha</Label>
-          <Input id="pwNew" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
+          <Input
+            id="pwNew"
+            type="password"
+            autoComplete="new-password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            required
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="pwConfirm">Repita a nova</Label>
-          <Input id="pwConfirm" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+          <Input
+            id="pwConfirm"
+            type="password"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            required
+          />
         </div>
         <div className="sm:col-span-3">
           <Button type="submit" disabled={busy}>
@@ -423,8 +708,9 @@ function DataSection({ onDeleted }: { onDeleted: () => void }) {
       <div className="space-y-2 border-t border-border pt-4">
         <h3 className="text-sm font-semibold text-destructive">Excluir conta</h3>
         <p className="text-sm text-muted-foreground">
-          Apaga seus projetos sem membros, suas publicações e avisos, e tira você dos outros projetos. Projetos
-          seus com membros precisam ser passados para alguém antes (aba Membros). Não dá para desfazer.
+          Apaga seus projetos sem membros, suas publicações e avisos, e tira você dos outros
+          projetos. Projetos seus com membros precisam ser passados para alguém antes (aba Membros).
+          Não dá para desfazer.
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-2">
@@ -437,7 +723,12 @@ function DataSection({ onDeleted }: { onDeleted: () => void }) {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
-          <Button type="button" variant="destructive" disabled={!password || busy} onClick={() => setConfirmOpen(true)}>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={!password || busy}
+            onClick={() => setConfirmOpen(true)}
+          >
             <Trash2 className="mr-1 size-4" /> Excluir minha conta
           </Button>
         </div>

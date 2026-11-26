@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Eye, EyeOff, Globe, Lock, MoreHorizontal, Trash2 } from "lucide-react";
+import { Eye, EyeOff, Globe, Lock, MoreHorizontal, Repeat2, Trash2 } from "lucide-react";
 
 import { ArtImage } from "@/components/art/ArtPieces";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
+import { PostActions } from "@/components/posts/PostActions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,7 +79,31 @@ export function PostLabel({ label }: { label: Post["label"] }) {
   );
 }
 
-/** Uma imagem ocupa a largura toda; de 2 a 4 viram grade; acima de 4, mostra "+N" na quarta. */
+/** Posição de cada imagem na grade, de 2 a 6 (estilo X). */
+const GRID: Record<number, { grid: string; cells: string[] }> = {
+  2: { grid: "grid-cols-2", cells: ["aspect-[4/5]", "aspect-[4/5]"] },
+  3: {
+    grid: "grid-cols-2 grid-rows-2",
+    cells: ["row-span-2 h-full", "aspect-[4/3]", "aspect-[4/3]"],
+  },
+  4: { grid: "grid-cols-2", cells: Array(4).fill("aspect-[4/3]") },
+  5: {
+    grid: "grid-cols-6",
+    cells: [
+      "col-span-3 aspect-[4/3]",
+      "col-span-3 aspect-[4/3]",
+      "col-span-2 aspect-square",
+      "col-span-2 aspect-square",
+      "col-span-2 aspect-square",
+    ],
+  },
+  6: { grid: "grid-cols-3", cells: Array(6).fill("aspect-square") },
+};
+
+/**
+ * Uma imagem ocupa a largura toda; de 2 a 6 viram grade. Acima de 6 (WIPs de projeto, que não têm limite),
+ * mostra as 6 primeiras e "+N" na última.
+ */
 export function PostImages({ post }: { post: Post }) {
   const images = post.images;
   if (images.length === 0) return null;
@@ -90,13 +115,20 @@ export function PostImages({ post }: { post: Post }) {
       </div>
     );
   }
-  const shown = images.slice(0, 4);
+  const shown = images.slice(0, 6);
   const extra = images.length - shown.length;
+  const layout = GRID[shown.length]!;
   return (
-    <div className="mt-3 grid grid-cols-2 gap-1 overflow-hidden rounded-2xl border border-border">
+    <div
+      className={`mt-3 grid gap-0.5 overflow-hidden rounded-2xl border border-border ${layout.grid}`}
+    >
       {shown.map((image, index) => (
-        <div key={image.id} className="relative">
-          <ArtImage src={image.url} title={alt} className="aspect-square w-full object-cover" />
+        <div key={image.id} className={`relative overflow-hidden ${layout.cells[index]}`}>
+          <ArtImage
+            src={image.url}
+            title={`${alt} (${index + 1} de ${images.length})`}
+            className="size-full object-cover"
+          />
           {extra > 0 && index === shown.length - 1 && (
             <span className="absolute inset-0 flex items-center justify-center bg-black/60 text-lg font-semibold">
               +{extra}
@@ -138,11 +170,14 @@ export function PostCard({
   now,
   onChanged,
   onDeleted,
+  repostedBy,
 }: {
   post: Post;
   now: number;
   onChanged?: (post: Post) => void;
   onDeleted?: (postId: number) => void;
+  /** Nome de quem republicou (aparece em cima, como no X). */
+  repostedBy?: string;
 }) {
   const { user } = useAuth();
   const mine = user?.username === post.author.username;
@@ -181,124 +216,140 @@ export function PostCard({
   };
 
   return (
-    <li className="flex gap-3 p-4 transition-colors hover:bg-white/[0.03]">
-      <Link
-        to="/u/$username"
-        params={{ username: post.author.username }}
-        aria-label={`Perfil de ${post.author.fullName}`}
-      >
-        <UserAvatar name={post.author.fullName} src={post.author.avatarUrl} />
-      </Link>
-      <article className="min-w-0 flex-1">
-        <header className="flex items-start gap-2">
-          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1 text-[15px] leading-5">
-            <Link
-              to="/u/$username"
-              params={{ username: post.author.username }}
-              className="truncate font-semibold hover:underline"
-            >
-              {post.author.fullName}
-            </Link>
-            <span className="truncate text-muted-foreground">@{post.author.username}</span>
-            <span className="text-muted-foreground" aria-hidden="true">
-              ·
-            </span>
-            <time
-              className="text-muted-foreground"
-              dateTime={post.createdAt}
-              title={new Date(post.createdAt).toLocaleString("pt-BR")}
-            >
-              {relativeTime(post.createdAt, now)}
-            </time>
-          </div>
-          <PostLabel label={post.label} />
-          {mine && (onChanged || onDeleted) && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="-mt-1 size-7"
-                  aria-label="Opções da publicação"
-                  disabled={busy}
-                >
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {post.kind === "STANDALONE" && onChanged && (
-                  <DropdownMenuItem onSelect={() => void toggleHidden()}>
-                    {post.hiddenFromPortfolio ? (
-                      <>
-                        <Eye className="mr-2 size-4" /> Mostrar no portfólio
-                      </>
-                    ) : (
-                      <>
-                        <EyeOff className="mr-2 size-4" /> Ocultar do portfólio
-                      </>
-                    )}
-                  </DropdownMenuItem>
-                )}
-                {onDeleted && (
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onSelect={() => setConfirmDelete(true)}
-                  >
-                    <Trash2 className="mr-2 size-4" /> Apagar publicação
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </header>
-        {context && <p className="mt-0.5 text-[15px] leading-5 text-muted-foreground">{context}</p>}
-        {post.title && post.kind !== "PROJECT_PUBLISHED" && (
-          <h3 className="mt-1 text-[15px] leading-5 font-bold">
-            <Link to="/publicacao/$postId" params={{ postId: String(post.id) }} className="hover:underline">
-              {post.title}
-            </Link>
-          </h3>
-        )}
-        {post.subtitle && (
-          <p className="mt-1 text-[15px] leading-5 whitespace-pre-wrap">{post.subtitle}</p>
-        )}
+    <li className="p-4 transition-colors hover:bg-white/[0.03]">
+      {repostedBy && (
+        <p className="mb-1 ml-7 flex items-center gap-2 text-[13px] font-semibold text-muted-foreground">
+          <Repeat2 className="size-4" /> {repostedBy} republicou
+        </p>
+      )}
+      <div className="flex gap-3">
         <Link
-          to="/publicacao/$postId"
-          params={{ postId: String(post.id) }}
-          aria-label={`Abrir ${post.title ?? "publicação"}`}
-          className="block"
+          to="/u/$username"
+          params={{ username: post.author.username }}
+          aria-label={`Perfil de ${post.author.fullName}`}
         >
-          <PostImages post={post} />
+          <UserAvatar name={post.author.fullName} src={post.author.avatarUrl} />
         </Link>
-        {(linksToProject || !post.isPublic || (mine && post.hiddenFromPortfolio)) && (
-          <footer className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            {linksToProject && (
+        <article className="min-w-0 flex-1">
+          <header className="flex items-start gap-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1 text-[15px] leading-5">
               <Link
-                to="/projetos/$projectId/publico"
-                params={{ projectId: String(post.project!.id) }}
-                className="inline-flex items-center gap-1 text-primary hover:underline"
+                to="/u/$username"
+                params={{ username: post.author.username }}
+                className="truncate font-semibold hover:underline"
               >
-                <Globe className="size-3" /> Ver projeto
+                {post.author.fullName}
               </Link>
-            )}
-            {!post.isPublic && (
-              <span className="inline-flex items-center gap-1">
-                <Lock className="size-3" /> Só você e quem participa do projeto veem
+              <span className="truncate text-muted-foreground">@{post.author.username}</span>
+              <span className="text-muted-foreground" aria-hidden="true">
+                ·
               </span>
+              <time
+                className="text-muted-foreground"
+                dateTime={post.createdAt}
+                title={new Date(post.createdAt).toLocaleString("pt-BR")}
+              >
+                {relativeTime(post.createdAt, now)}
+              </time>
+            </div>
+            <PostLabel label={post.label} />
+            {mine && (onChanged || onDeleted) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="-mt-1 size-7"
+                    aria-label="Opções da publicação"
+                    disabled={busy}
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {post.kind === "STANDALONE" && onChanged && (
+                    <DropdownMenuItem onSelect={() => void toggleHidden()}>
+                      {post.hiddenFromPortfolio ? (
+                        <>
+                          <Eye className="mr-2 size-4" /> Mostrar no portfólio
+                        </>
+                      ) : (
+                        <>
+                          <EyeOff className="mr-2 size-4" /> Ocultar do portfólio
+                        </>
+                      )}
+                    </DropdownMenuItem>
+                  )}
+                  {onDeleted && (
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onSelect={() => setConfirmDelete(true)}
+                    >
+                      <Trash2 className="mr-2 size-4" /> Apagar publicação
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-            {mine && post.hiddenFromPortfolio && (
-              <span className="inline-flex items-center gap-1">
-                <EyeOff className="size-3" /> Oculto do portfólio
-              </span>
-            )}
-          </footer>
-        )}
-        {error && (
-          <p role="alert" className="mt-2 text-xs text-destructive">
-            {error}
-          </p>
-        )}
-      </article>
+          </header>
+          {context && (
+            <p className="mt-0.5 text-[15px] leading-5 text-muted-foreground">{context}</p>
+          )}
+          {post.title && post.kind !== "PROJECT_PUBLISHED" && (
+            <h3 className="mt-1 text-[15px] leading-5 font-bold">
+              <Link
+                to="/publicacao/$postId"
+                params={{ postId: String(post.id) }}
+                className="hover:underline"
+              >
+                {post.title}
+              </Link>
+            </h3>
+          )}
+          {post.subtitle && (
+            <p className="mt-1 text-[15px] leading-5 whitespace-pre-wrap">{post.subtitle}</p>
+          )}
+          <Link
+            to="/publicacao/$postId"
+            params={{ postId: String(post.id) }}
+            aria-label={`Abrir ${post.title ?? "publicação"}`}
+            className="block"
+          >
+            <PostImages post={post} />
+          </Link>
+          {(linksToProject || !post.isPublic || (mine && post.hiddenFromPortfolio)) && (
+            <footer className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              {linksToProject && (
+                <Link
+                  to="/projetos/$projectId/publico"
+                  params={{ projectId: String(post.project!.id) }}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  <Globe className="size-3" /> Ver projeto
+                </Link>
+              )}
+              {!post.isPublic && (
+                <span className="inline-flex items-center gap-1">
+                  <Lock className="size-3" /> Só você e quem participa do projeto veem
+                </span>
+              )}
+              {mine && post.hiddenFromPortfolio && (
+                <span className="inline-flex items-center gap-1">
+                  <EyeOff className="size-3" /> Oculto do portfólio
+                </span>
+              )}
+            </footer>
+          )}
+          <div className="mt-2">
+            <PostActions post={post} onChange={onChanged} />
+          </div>
+          {error && (
+            <p role="alert" className="mt-2 text-xs text-destructive">
+              {error}
+            </p>
+          )}
+        </article>
+      </div>
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}

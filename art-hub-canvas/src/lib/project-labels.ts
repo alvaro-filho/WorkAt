@@ -44,7 +44,7 @@ export function projectTypeInfo(type: ProjectType) {
 
 /** Nome do papel como o usuário enxerga: no corporativo o membro é "Contratado". */
 export function roleLabel(role: ProjectRole, type: ProjectType) {
-  if (role === "OWNER") return "Dono";
+  if (role === "OWNER") return "Diretor";
   return type === "CORPORATE" ? "Contratado" : "Membro";
 }
 

@@ -262,7 +262,14 @@ function TaskPage() {
             onReviewed={() => setCommentsKey((k) => k + 1)}
           />
 
-          {finalImage && <FinalImage file={finalImage} />}
+          {finalImage && (
+            <FinalImage
+              file={finalImage}
+              canChange={canWork && !closed}
+              onChanged={loadFiles}
+              onError={setError}
+            />
+          )}
 
           <DeliveriesSection
             taskId={task.id}
@@ -327,7 +334,9 @@ function TaskPage() {
                     disabled={contractorOnly && option.value === "DONE" && task.status !== "DONE"}
                   >
                     {option.label}
-                    {contractorOnly && option.value === "DONE" && task.status !== "DONE" ? " (o dono aprova)" : ""}
+                    {contractorOnly && option.value === "DONE" && task.status !== "DONE"
+                      ? " (o diretor aprova)"
+                      : ""}
                   </option>
                 ))}
               </select>
@@ -426,15 +435,49 @@ function useFileObjectUrl(fileId: number | null) {
   return url;
 }
 
-function FinalImage({ file }: { file: TaskFile }) {
+function FinalImage({
+  file,
+  canChange,
+  onChanged,
+  onError,
+}: {
+  file: TaskFile;
+  canChange: boolean;
+  onChanged: () => Promise<void> | void;
+  onError: (message: string | null) => void;
+}) {
   const url = useFileObjectUrl(file.id);
+  const [busy, setBusy] = useState(false);
+  const unmark = async () => {
+    setBusy(true);
+    onError(null);
+    try {
+      await api.unmarkFinalFile(file.id);
+      await onChanged();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "Não foi possível desmarcar a imagem final.");
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <section className="glass overflow-hidden rounded-2xl">
-      <div className="flex items-center gap-2 px-4 pt-4 text-sm font-semibold">
-        <Star className="size-4 text-primary" /> Imagem final
+      <div className="flex flex-wrap items-center gap-2 px-4 pt-4 text-sm font-semibold">
+        <Star className="size-4 fill-current text-primary" /> Imagem final
         <span className="text-xs font-normal text-muted-foreground">
           v{file.version} · {file.originalName}
         </span>
+        {canChange && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="ml-auto"
+            disabled={busy}
+            onClick={() => void unmark()}
+          >
+            {busy ? "Desmarcando..." : "Desmarcar"}
+          </Button>
+        )}
       </div>
       <div className="flex min-h-48 items-center justify-center p-4">
         {url ? (
@@ -510,10 +553,11 @@ function DeliveriesSection({
   const setFinal = async (file: TaskFile) => {
     onError(null);
     try {
-      await api.markFinalFile(file.id);
+      if (file.finalImage) await api.unmarkFinalFile(file.id);
+      else await api.markFinalFile(file.id);
       await onChanged();
     } catch (e) {
-      onError(e instanceof Error ? e.message : "Não foi possível marcar como final.");
+      onError(e instanceof Error ? e.message : "Não foi possível mudar a imagem final.");
     }
   };
 
@@ -630,15 +674,21 @@ function DeliveriesSection({
                 </p>
               </div>
               <div className="flex gap-1">
-                {canUpload && file.image && !file.finalImage && (
+                {canUpload && file.image && (
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => void setFinal(file)}
-                    aria-label={`Marcar ${file.originalName} como imagem final`}
-                    title="Marcar como imagem final"
+                    aria-pressed={file.finalImage}
+                    aria-label={
+                      file.finalImage
+                        ? `Desmarcar ${file.originalName} como imagem final`
+                        : `Marcar ${file.originalName} como imagem final`
+                    }
+                    title={file.finalImage ? "Desmarcar imagem final" : "Marcar como imagem final"}
+                    className={file.finalImage ? "text-primary" : ""}
                   >
-                    <Star className="size-4" />
+                    <Star className="size-4" fill={file.finalImage ? "currentColor" : "none"} />
                   </Button>
                 )}
                 <Button

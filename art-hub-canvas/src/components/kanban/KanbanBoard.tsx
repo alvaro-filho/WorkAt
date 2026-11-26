@@ -102,7 +102,7 @@ export function KanbanBoard({
     const task = localTasks.find((item) => item.id === id);
     if (!task || !canDrag(task) || toUiStatus[task.status] === status) return;
     if (status === "done" && !canFinishTask(task)) {
-      setFormError("Envie para Em Revisão: no corporativo, o dono conclui ao aprovar.");
+      setFormError("Envie para Em Revisão: no corporativo, o diretor conclui ao aprovar.");
       return;
     }
     const previous = localTasks;
@@ -151,7 +151,7 @@ export function KanbanBoard({
         <div className="glass flex flex-wrap items-center gap-3 rounded-2xl p-4">
           {closed ? (
             <p role="status" className="mr-auto text-sm text-amber-300">
-              Projeto encerrado. O dono pode retomá-lo em Configurações.
+              Projeto encerrado. O diretor pode retomá-lo em Configurações.
             </p>
           ) : !canManageTasks && readOnlyHint ? (
             <p role="status" className="mr-auto text-sm text-muted-foreground">
@@ -307,7 +307,9 @@ export function KanbanBoard({
                           {draggable && (
                             <GripVertical className="mt-0.5 hidden size-4 shrink-0 text-muted-foreground sm:block" />
                           )}
-                          <p className="min-w-0 flex-1 text-sm font-medium break-words">{task.title}</p>
+                          <p className="min-w-0 flex-1 text-sm font-medium break-words">
+                            {task.title}
+                          </p>
                           {draggable && (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -333,7 +335,9 @@ export function KanbanBoard({
                                     >
                                       {target.label}
                                       {blocked && (
-                                        <span className="ml-2 text-xs text-muted-foreground">(o dono aprova)</span>
+                                        <span className="ml-2 text-xs text-muted-foreground">
+                                          (o diretor aprova)
+                                        </span>
                                       )}
                                     </DropdownMenuItem>
                                   );
@@ -374,7 +378,11 @@ export function KanbanBoard({
                         </div>
                         {task.assignee && (
                           <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                            <UserAvatar name={task.assignee.fullName} src={task.assignee.avatarUrl} size="xs" />
+                            <UserAvatar
+                              name={task.assignee.fullName}
+                              src={task.assignee.avatarUrl}
+                              size="xs"
+                            />
                             <span className="truncate">{task.assignee.fullName}</span>
                           </div>
                         )}

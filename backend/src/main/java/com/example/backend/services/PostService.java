@@ -6,12 +6,14 @@ import com.example.backend.dto.UserSummary;
 import com.example.backend.models.Post;
 import com.example.backend.models.PostImage;
 import com.example.backend.models.PostKind;
+import com.example.backend.models.PostReaction;
 import com.example.backend.models.Project;
 import com.example.backend.models.ProjectType;
 import com.example.backend.models.Task;
 import com.example.backend.models.TaskFile;
 import com.example.backend.models.User;
 import com.example.backend.repositories.PostImageRepository;
+import com.example.backend.repositories.PostReactionRepository;
 import com.example.backend.repositories.PostRepository;
 import com.example.backend.repositories.TaskFileRepository;
 import org.springframework.data.domain.PageRequest;
@@ -51,6 +53,8 @@ public class PostService {
     static final int MAX_SUBTITLE = 2000;
     static final long MAX_IMAGE_BYTES = 50L * 1024 * 1024;
     static final int MAX_FEED_PAGE = 50;
+    /** Post avulso: até 6 imagens. WIPs de projeto não têm limite (cada etapa fica registrada). */
+    public static final int MAX_STANDALONE_IMAGES = 6;
     static final Map<String, String> IMAGE_TYPES = Map.of(
             "png", "image/png", "jpg", "image/jpeg", "jpeg", "image/jpeg", "webp", "image/webp", "gif", "image/gif");
 
@@ -59,6 +63,13 @@ public class PostService {
     private final TaskFileRepository fileRepository;
     private final ProjectAccessService access;
     private final FileStorage storage;
+
+    private PostReactionRepository reactionRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setReactionRepository(PostReactionRepository reactionRepository) {
+        this.reactionRepository = reactionRepository;
+    }
 
     public PostService(PostRepository postRepository, PostImageRepository imageRepository,
                        TaskFileRepository fileRepository, ProjectAccessService access, FileStorage storage) {
@@ -104,12 +115,17 @@ public class PostService {
 
     @Transactional(readOnly = true)
     public List<PostResponse> feed(Long before, Integer limit) {
+        return feed(before, limit, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PostResponse> feed(Long before, Integer limit, User viewer) {
         int size = limit == null || limit < 1 ? 20 : Math.min(limit, MAX_FEED_PAGE);
         long cursor = before == null ? Long.MAX_VALUE : before;
-        return postRepository.findPublicFeed(cursor, BusinessTime.today(), PageRequest.of(0, size)).stream()
+        List<Post> page = postRepository.findPublicFeed(cursor, BusinessTime.today(), PageRequest.of(0, size)).stream()
                 .filter(post -> !post.getImages().isEmpty() || post.getKind() == PostKind.PROJECT_PUBLISHED)
-                .map(this::toResponse)
                 .toList();
+        return toResponses(page, viewer);
     }
 
     /** Publicações de alguém que o visitante pode ver (o próprio autor vê todas). */
@@ -131,6 +147,17 @@ public class PostService {
     /** Capa de um projeto público: a imagem mais recente das publicações públicas dele. */
     @Transactional(readOnly = true)
     public Optional<String> coverOf(Project project) {
+        // Capa escolhida pelo diretor, se ainda é uma imagem visível do projeto.
+        if (project.getCoverFileId() != null) {
+            Optional<TaskFile> chosen = fileRepository.findById(project.getCoverFileId())
+                    .filter(file -> file.getTask() != null && file.getTask().getProject() != null
+                            && project.getId().equals(file.getTask().getProject().getId())
+                            && !file.getTask().isHiddenFromPublic()
+                            && TaskFileService.isPreviewableImage(file.getContentType()));
+            if (chosen.isPresent()) {
+                return Optional.of("/api/v1/projects/" + project.getId() + "/public/files/" + chosen.get().getId());
+            }
+        }
         return postRepository.findByProjectOrderByIdDesc(project).stream()
                 .filter(PostService::isPublic)
                 .filter(post -> !post.getImages().isEmpty())
@@ -138,9 +165,19 @@ public class PostService {
                 .map(post -> imageUrl(post, post.getImages().get(post.getImages().size() - 1)));
     }
 
+    /** Data da publicação pública mais recente do projeto (ordena o portfólio e o Explorar). */
+    @Transactional(readOnly = true)
+    public Optional<LocalDateTime> lastPublicActivity(Project project) {
+        return postRepository.findByProjectOrderByIdDesc(project).stream()
+                .filter(PostService::isPublic)
+                .map(Post::getCreatedAt)
+                .filter(java.util.Objects::nonNull)
+                .findFirst();
+    }
+
     @Transactional(readOnly = true)
     public PostResponse get(Long postId, User viewer) {
-        return toResponse(findVisible(postId, viewer));
+        return toResponse(findVisible(postId, viewer), viewer);
     }
 
     @Transactional(readOnly = true)
@@ -162,31 +199,81 @@ public class PostService {
 
     @Transactional
     public Post createStandalone(User author, MultipartFile file, String title, String subtitle) {
-        if (file == null || file.isEmpty()) {
+        return createStandalone(author, file == null ? List.of() : List.of(file), title, subtitle);
+    }
+
+    /** Post avulso estilo X: de 1 a 6 imagens, título e subtítulo opcionais. */
+    @Transactional
+    public Post createStandalone(User author, List<MultipartFile> files, String title, String subtitle) {
+        List<MultipartFile> images = files == null ? List.of()
+                : files.stream().filter(file -> file != null && !file.isEmpty()).toList();
+        if (images.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Escolha uma imagem para publicar.");
         }
-        if (file.getSize() > MAX_IMAGE_BYTES) {
-            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "A imagem passa do limite de 50 MB.");
+        if (images.size() > MAX_STANDALONE_IMAGES) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Uma publicação aceita até " + MAX_STANDALONE_IMAGES + " imagens. Para registrar mais etapas, use um projeto.");
         }
-        String extension = TaskFileService.extensionOf(TaskFileService.cleanFileName(file.getOriginalFilename()));
-        String contentType = IMAGE_TYPES.get(extension);
-        if (contentType == null) {
-            throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
-                    "A imagem precisa ser PNG, JPG, WEBP ou GIF.");
+        List<String> extensions = new ArrayList<>();
+        for (MultipartFile file : images) {
+            if (file.getSize() > MAX_IMAGE_BYTES) {
+                throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "Cada imagem pode ter até 50 MB.");
+            }
+            String extension = TaskFileService.extensionOf(TaskFileService.cleanFileName(file.getOriginalFilename()));
+            if (IMAGE_TYPES.get(extension) == null) {
+                throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                        "As imagens precisam ser PNG, JPG, WEBP ou GIF.");
+            }
+            extensions.add(extension);
         }
         Post post = new Post();
         post.setAuthor(author);
         post.setKind(PostKind.STANDALONE);
         post.setTitle(cleanTitle(title));
         post.setSubtitle(cleanSubtitle(subtitle));
-        String storedName;
-        try {
-            storedName = storage.save(file.getInputStream(), extension);
-        } catch (IOException exception) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Não foi possível salvar a imagem.");
+        for (int index = 0; index < images.size(); index++) {
+            MultipartFile file = images.get(index);
+            String extension = extensions.get(index);
+            String storedName;
+            try {
+                storedName = storage.save(file.getInputStream(), extension);
+            } catch (IOException exception) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Não foi possível salvar a imagem.");
+            }
+            post.addImage(PostImage.ofStored(storedName, IMAGE_TYPES.get(extension), file.getSize()));
         }
-        post.addImage(PostImage.ofStored(storedName, contentType, file.getSize()));
         return postRepository.save(post);
+    }
+
+    // ---- Reações: curtir, republicar, salvar ----
+
+    /** Liga ou desliga uma reação de quem está logado. Só em publicações que a pessoa consegue ver. */
+    @Transactional
+    public PostResponse react(Long postId, User user, PostReaction.Type type, boolean on) {
+        if (reactionRepository == null) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Reações indisponíveis.");
+        }
+        Post post = findVisible(postId, user);
+        Optional<PostReaction> existing = reactionRepository.findByPostAndUserAndType(post, user, type);
+        if (on && existing.isEmpty()) {
+            reactionRepository.save(PostReaction.of(post, user, type));
+        } else if (!on) {
+            existing.ifPresent(reactionRepository::delete);
+        }
+        reactionRepository.flush();
+        return toResponse(post, user);
+    }
+
+    /** Publicações que alguém republicou (ou salvou), que o visitante pode ver, com a data da reação. */
+    @Transactional(readOnly = true)
+    public List<Map.Entry<Post, LocalDateTime>> reactedBy(User owner, PostReaction.Type type, User viewer) {
+        if (reactionRepository == null) {
+            return List.of();
+        }
+        return reactionRepository.findByUserAndTypeOrderByIdDesc(owner, type).stream()
+                .filter(reaction -> canView(reaction.getPost(), viewer))
+                .map(reaction -> Map.entry(reaction.getPost(), reaction.getCreatedAt()))
+                .toList();
     }
 
     /** "Publicar como post": uma imagem de tarefa vira post avulso, mesmo com o projeto privado (mas não com NDA). */
@@ -384,6 +471,39 @@ public class PostService {
     // ---- Apoio ----
 
     public PostResponse toResponse(Post post) {
+        return toResponse(post, null);
+    }
+
+    public PostResponse toResponse(Post post, User viewer) {
+        return toResponses(List.of(post), viewer).get(0);
+    }
+
+    /** Monta várias de uma vez: duas consultas para todas as contagens e reações, não uma por publicação. */
+    @Transactional(readOnly = true)
+    public List<PostResponse> toResponses(List<Post> posts, User viewer) {
+        if (posts.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = posts.stream().map(Post::getId).filter(java.util.Objects::nonNull).toList();
+        Map<Long, long[]> counts = new java.util.HashMap<>();
+        Map<Long, Set<PostReaction.Type>> mine = new java.util.HashMap<>();
+        if (reactionRepository != null && !ids.isEmpty()) {
+            for (Object[] row : reactionRepository.countByPosts(ids)) {
+                long[] value = counts.computeIfAbsent((Long) row[0], key -> new long[3]);
+                value[((PostReaction.Type) row[1]).ordinal()] = (Long) row[2];
+            }
+            if (viewer != null) {
+                for (Object[] row : reactionRepository.findMine(viewer, ids)) {
+                    mine.computeIfAbsent((Long) row[0], key -> new java.util.HashSet<>()).add((PostReaction.Type) row[1]);
+                }
+            }
+        }
+        return posts.stream().map(post -> build(post,
+                counts.getOrDefault(post.getId(), new long[3]),
+                mine.getOrDefault(post.getId(), Set.of()))).toList();
+    }
+
+    private PostResponse build(Post post, long[] counts, Set<PostReaction.Type> mine) {
         Task task = post.getTask();
         Project project = post.getProject();
         String title = post.getTitle() != null ? post.getTitle()
@@ -407,7 +527,12 @@ public class PostService {
                         .toList(),
                 post.isHiddenFromPortfolio(),
                 isPublic(post),
-                post.getCreatedAt());
+                post.getCreatedAt(),
+                counts[PostReaction.Type.LIKE.ordinal()],
+                counts[PostReaction.Type.REPOST.ordinal()],
+                mine.contains(PostReaction.Type.LIKE),
+                mine.contains(PostReaction.Type.REPOST),
+                mine.contains(PostReaction.Type.SAVE));
     }
 
     static String labelOf(Post post) {

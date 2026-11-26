@@ -48,6 +48,10 @@ public class Project {
     // Só vale no corporativo com NDA: até esta data, nada do projeto aparece em público.
     private java.time.LocalDate ndaReleaseDate;
 
+    /** Capa escolhida pelo diretor (id de um arquivo de imagem do projeto). Sem escolha: a imagem mais recente. */
+    @Column(name = "cover_file_id")
+    private Long coverFileId;
+
     // Relacionamento opcional com o Criador do Projeto (usuário)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id", nullable = false)
@@ -161,6 +165,14 @@ public class Project {
 
     public void setPublicSince(java.time.LocalDateTime publicSince) {
         this.publicSince = publicSince;
+    }
+
+    public Long getCoverFileId() {
+        return coverFileId;
+    }
+
+    public void setCoverFileId(Long coverFileId) {
+        this.coverFileId = coverFileId;
     }
 
     public java.time.LocalDate getNdaReleaseDate() {

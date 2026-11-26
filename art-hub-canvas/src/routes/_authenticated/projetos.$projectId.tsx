@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Crown, Download, Eye, Globe, History, Lock, LogOut, Mail, UserMinus, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Crown,
+  Download,
+  Eye,
+  Globe,
+  History,
+  Lock,
+  LogOut,
+  Mail,
+  UserMinus,
+  X,
+} from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
@@ -156,7 +168,8 @@ function ProjectPage() {
         ];
 
   return (
-    <AppLayout layout="wide"
+    <AppLayout
+      layout="wide"
       title={project.name}
       subtitle={`${typeInfo.label} · ${roleLabel(project.myRole, project.type)}`}
     >
@@ -187,7 +200,7 @@ function ProjectPage() {
           </p>
           {project.owner && project.myRole === "MEMBER" && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Dono: <span className="text-foreground">{project.owner.fullName}</span>
+              Diretor: <span className="text-foreground">{project.owner.fullName}</span>
             </p>
           )}
         </div>
@@ -239,8 +252,8 @@ function ProjectPage() {
             readOnlyHint={
               project.type === "CORPORATE" && !permissions.owner
                 ? project.contractorsSeeAllTasks
-                  ? "Você vê todas as tarefas, mas só mexe nas suas. Quando terminar, mova para Em Revisão: o dono aprova."
-                  : "Aqui aparecem só as suas tarefas. Quando terminar, mova para Em Revisão: o dono aprova."
+                  ? "Você vê todas as tarefas, mas só mexe nas suas. Quando terminar, mova para Em Revisão: o diretor aprova."
+                  : "Aqui aparecem só as suas tarefas. Quando terminar, mova para Em Revisão: o diretor aprova."
                 : undefined
             }
             onCreateTask={createTask}
@@ -357,7 +370,10 @@ function MembersTab({ project }: { project: Project }) {
       window.location.reload();
     } catch (e) {
       setToOwner(null);
-      setMessage({ kind: "error", text: e instanceof Error ? e.message : "Não foi possível passar o projeto." });
+      setMessage({
+        kind: "error",
+        text: e instanceof Error ? e.message : "Não foi possível passar o projeto.",
+      });
     } finally {
       setBusy(false);
     }
@@ -370,7 +386,10 @@ function MembersTab({ project }: { project: Project }) {
       setMessage({ kind: "ok", text: `Convite de ${invitation.invitedUser.fullName} cancelado.` });
       await load();
     } catch (e) {
-      setMessage({ kind: "error", text: e instanceof Error ? e.message : "Não foi possível cancelar." });
+      setMessage({
+        kind: "error",
+        text: e instanceof Error ? e.message : "Não foi possível cancelar.",
+      });
     }
   };
 
@@ -397,7 +416,7 @@ function MembersTab({ project }: { project: Project }) {
               name={project.owner.fullName}
               username={project.owner.username}
               avatarUrl={project.owner.avatarUrl}
-              label="Dono"
+              label="Diretor"
               highlight
             />
           )}
@@ -451,11 +470,12 @@ function MembersTab({ project }: { project: Project }) {
       {permissions.owner && (
         <section className="glass space-y-4 rounded-2xl p-4">
           <form onSubmit={invite} className="space-y-2">
-            <Label htmlFor="inviteEmail">Convidar por e-mail</Label>
+            <Label htmlFor="inviteEmail">Convidar por e-mail ou @usuário</Label>
             <Input
               id="inviteEmail"
-              type="email"
-              placeholder="email@exemplo.com"
+              type="text"
+              autoComplete="off"
+              placeholder="email@exemplo.com ou @usuario"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={!permissions.canInvite}
@@ -463,7 +483,7 @@ function MembersTab({ project }: { project: Project }) {
             />
             <p className="text-xs text-muted-foreground">
               {permissions.canInvite
-                ? "A pessoa precisa já ter conta no WorkAt e vai ver o convite na tela de Projetos."
+                ? "A pessoa precisa ter conta no WorkAt e recebe o convite em Notificações › Convites. Algumas pessoas só aceitam convite pelo e-mail."
                 : "Retome o projeto para convidar pessoas."}
             </p>
             <Button type="submit" disabled={busy || !permissions.canInvite} className="w-full">
@@ -475,11 +495,15 @@ function MembersTab({ project }: { project: Project }) {
               <h4 className="mb-2 text-xs font-semibold text-muted-foreground">
                 Convites pendentes
               </h4>
-              <p className="mb-2 text-xs text-muted-foreground">Convites expiram em 30 dias sem resposta.</p>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Convites expiram em 30 dias sem resposta.
+              </p>
               <ul className="space-y-1 text-sm">
                 {pending.map((invitation) => (
                   <li key={invitation.id} className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 flex-1 truncate">{invitation.invitedUser.fullName}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {invitation.invitedUser.fullName}
+                    </span>
                     <span className="text-xs text-muted-foreground">aguardando</span>
                     <Button
                       size="sm"
@@ -533,8 +557,8 @@ function MembersTab({ project }: { project: Project }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Sair do projeto?</AlertDialogTitle>
             <AlertDialogDescription>
-              Você deixa de ver as tarefas deste projeto. Para voltar, o dono precisa convidar você
-              de novo.
+              Você deixa de ver as tarefas deste projeto. Para voltar, o diretor precisa convidar
+              você de novo.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -594,7 +618,9 @@ function HistoryTab({ projectId }: { projectId: number }) {
     api
       .projectHistory(projectId)
       .then(setEntries)
-      .catch((e) => setError(e instanceof Error ? e.message : "Não foi possível carregar o histórico."));
+      .catch((e) =>
+        setError(e instanceof Error ? e.message : "Não foi possível carregar o histórico."),
+      );
   }, [projectId]);
 
   if (error)
@@ -608,7 +634,8 @@ function HistoryTab({ projectId }: { projectId: number }) {
     return (
       <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
         <History className="mx-auto mb-2 size-6" />
-        Nada registrado ainda. Tarefas criadas, movidas, revisadas e arquivos enviados aparecem aqui.
+        Nada registrado ainda. Tarefas criadas, movidas, revisadas e arquivos enviados aparecem
+        aqui.
       </div>
     );
   return (
@@ -619,7 +646,10 @@ function HistoryTab({ projectId }: { projectId: number }) {
           <div className="min-w-0 flex-1">
             <p className="text-sm">{entry.message}</p>
             <p className="text-xs text-muted-foreground">
-              <time dateTime={entry.createdAt} title={new Date(entry.createdAt).toLocaleString("pt-BR")}>
+              <time
+                dateTime={entry.createdAt}
+                title={new Date(entry.createdAt).toLocaleString("pt-BR")}
+              >
                 {relativeTime(entry.createdAt, now)}
               </time>
             </p>
@@ -820,7 +850,12 @@ function SettingsTab({
               </Button>
             )}
             {draftChanged && (
-              <Button variant="ghost" size="sm" disabled={busy} onClick={() => setDraftDate(project.ndaReleaseDate ?? "")}>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => setDraftDate(project.ndaReleaseDate ?? "")}
+              >
                 Cancelar
               </Button>
             )}
@@ -855,7 +890,9 @@ function SettingsTab({
         destructive
         busy={busy}
         onConfirm={() =>
-          void saveSetting(ndaConfirm === "off" ? { ndaEnabled: false } : { ndaReleaseDate: draftDate })
+          void saveSetting(
+            ndaConfirm === "off" ? { ndaEnabled: false } : { ndaReleaseDate: draftDate },
+          )
         }
       />
       {error && (

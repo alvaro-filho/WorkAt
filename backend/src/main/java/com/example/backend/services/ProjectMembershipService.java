@@ -88,7 +88,8 @@ public class ProjectMembershipService {
     @Transactional
     public ProjectInvitation invite(Long projectId, User owner, String email) {
         if (email == null || email.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o e-mail de quem você quer convidar.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Informe o e-mail ou o @usuário de quem você quer convidar.");
         }
         Project project = access.requireOwner(projectId, owner);
         if (project.getType() == ProjectType.PERSONAL) {
@@ -99,14 +100,7 @@ public class ProjectMembershipService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Projeto encerrado. Retome o projeto para convidar.");
         }
 
-        User invited = userRepository.findByEmail(email.trim().toLowerCase())
-                .or(() -> userRepository.findByEmail(email.trim()))
-                .or(() -> {
-                    List<User> matches = userRepository.findAllByEmailIgnoreCase(email.trim());
-                    return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
-                })
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Nenhuma conta encontrada com esse e-mail."));
+        User invited = findInvitee(email.trim());
 
         if (ProjectAccessService.sameUser(invited, owner)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Você já é o dono deste projeto.");
@@ -129,6 +123,36 @@ public class ProjectMembershipService {
         ProjectInvitation saved = invitationRepository.save(invitation);
         publish(WorkEvent.Type.INVITE_SENT, project, owner, invited);
         return saved;
+    }
+
+    /**
+     * Quem vai ser convidado: "nome@dominio" procura pelo e-mail; "@usuario" (ou só "usuario") pelo @ da
+     * plataforma, se a pessoa permite ser convidada assim (aba Permissões em Minha conta).
+     */
+    private User findInvitee(String value) {
+        boolean byEmail = value.indexOf('@') > 0;
+        if (byEmail) {
+            return userRepository.findByEmail(value.toLowerCase())
+                    .or(() -> userRepository.findByEmail(value))
+                    .or(() -> {
+                        List<User> matches = userRepository.findAllByEmailIgnoreCase(value);
+                        return matches.size() == 1 ? Optional.of(matches.get(0)) : Optional.empty();
+                    })
+                    .filter(user -> !user.isDeleted())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                            "Nenhuma conta encontrada com esse e-mail."));
+        }
+        String username = value.startsWith("@") ? value.substring(1).trim() : value;
+        User user = userRepository.findByUsername(username)
+                .or(() -> userRepository.findByUsernameIgnoreCase(username))
+                .filter(found -> !found.isDeleted())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Nenhuma conta encontrada com o @" + username + "."));
+        if (!user.isInviteByUsername()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "@" + user.getUsername() + " só aceita convites pelo e-mail.");
+        }
+        return user;
     }
 
     /** O dono cancela um convite ainda sem resposta. */
@@ -182,7 +206,9 @@ public class ProjectMembershipService {
         ProjectInvitation invitation = findPending(invitationId, user);
         invitation.setStatus(InvitationStatus.DECLINED);
         invitation.setRespondedAt(LocalDateTime.now());
-        return invitationRepository.save(invitation);
+        ProjectInvitation saved = invitationRepository.save(invitation);
+        publish(WorkEvent.Type.INVITE_DECLINED, invitation.getProject(), user, invitation.getInvitedBy());
+        return saved;
     }
 
     /** O membro sai do projeto. O dono não pode sair (ele encerra ou apaga). */

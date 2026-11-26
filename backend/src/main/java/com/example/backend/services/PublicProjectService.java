@@ -46,6 +46,41 @@ public class PublicProjectService {
         this.storage = storage;
     }
 
+    private PostService postService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setPostService(PostService postService) {
+        this.postService = postService;
+    }
+
+    /** Aba Projetos do Explorar: projetos abertos ao público (sem NDA ativo), com atividade mais recente primeiro. */
+    @Transactional(readOnly = true)
+    public List<com.example.backend.dto.PublicProjectCard> listPublic(int limit) {
+        List<com.example.backend.dto.PublicProjectCard> cards = new ArrayList<>();
+        for (Project project : projectRepository.findByAutoWipTrue()) {
+            if (!PostService.isProjectPublic(project)) {
+                continue;
+            }
+            List<TaskFile> images = fileRepository.findByTask_Project(project).stream()
+                    .filter(file -> showsInPublicView(file, null, true))
+                    .sorted(Comparator.comparing(TaskFile::getCreatedAt).reversed())
+                    .toList();
+            if (images.isEmpty()) {
+                continue;
+            }
+            String cover = postService == null ? null : postService.coverOf(project).orElse(null);
+            if (cover == null) {
+                cover = "/api/v1/projects/" + project.getId() + "/public/files/" + images.get(0).getId();
+            }
+            cards.add(new com.example.backend.dto.PublicProjectCard(project.getId(), project.getName(),
+                    project.getDescription(), project.getType(), UserSummary.from(project.getCreatedByUser()),
+                    cover, images.size(), images.get(0).getCreatedAt()));
+        }
+        cards.sort(Comparator.comparing(com.example.backend.dto.PublicProjectCard::lastActivityAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return cards.size() > limit ? cards.subList(0, limit) : cards;
+    }
+
     /** order: "asc" (padrão, mais antiga primeiro, conta a história) ou "desc". */
     @Transactional(readOnly = true)
     public PublicProjectResponse view(Long projectId, User viewer, String order) {
@@ -80,7 +115,7 @@ public class PublicProjectService {
                 .toList();
         return new PublicProjectResponse(project.getId(), project.getName(), project.getDescription(),
                 project.getType(), project.getStatus(), UserSummary.from(project.getCreatedByUser()), members,
-                project.getPublicSince(), isPublic, participates, updates);
+                project.getPublicSince(), isPublic, participates, project.getCoverFileId(), updates);
     }
 
     @Transactional(readOnly = true)

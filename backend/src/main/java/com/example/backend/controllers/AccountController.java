@@ -40,7 +40,8 @@ public class AccountController {
     public record AccountResponse(Long id, String fullName, String username, String email, String role,
                                   String avatarUrl, String bio, List<String> specialties, List<String> links,
                                   LocalDateTime createdAt, long storageUsedBytes, long storageQuotaBytes,
-                                  String bannerUrl) {
+                                  String bannerUrl, String avatarCrop, String bannerCrop,
+                                  boolean inviteByUsername) {
     }
 
     public record ProfileUpdate(String fullName, String bio, List<String> specialties, List<String> links) {
@@ -62,12 +63,22 @@ public class AccountController {
         return new AccountResponse(user.getId(), user.getFullName(), user.getUsername(), user.getEmail(),
                 user.getRole().name(), user.avatarUrl(), user.getBio(),
                 ProfileResponse.split(user.getSpecialties(), ","), ProfileResponse.split(user.getLinks(), "\n"),
-                user.getCreatedAt(), accounts.usedBytes(user), accounts.quotaBytes(), user.bannerUrl());
+                user.getCreatedAt(), accounts.usedBytes(user), accounts.quotaBytes(), user.bannerUrl(),
+                user.getAvatarCrop(), user.getBannerCrop(), user.isInviteByUsername());
     }
 
     @GetMapping("/api/v1/me")
     public AccountResponse me(Authentication authentication) {
         return response(currentUser.require(authentication));
+    }
+
+    public record PermissionsUpdate(Boolean inviteByUsername) {
+    }
+
+    @PatchMapping("/api/v1/me/permissions")
+    public AccountResponse updatePermissions(@RequestBody PermissionsUpdate request, Authentication authentication) {
+        User user = currentUser.require(authentication);
+        return response(accounts.updatePermissions(user, request == null ? null : request.inviteByUsername()));
     }
 
     @PatchMapping("/api/v1/me/profile")
@@ -78,8 +89,22 @@ public class AccountController {
     }
 
     @PostMapping(value = "/api/v1/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public AccountResponse uploadAvatar(@RequestParam("file") MultipartFile file, Authentication authentication) {
-        return response(accounts.uploadAvatar(currentUser.require(authentication), file));
+    public AccountResponse uploadAvatar(@RequestParam("file") MultipartFile file,
+                                        @RequestParam(value = "original", required = false) MultipartFile original,
+                                        @RequestParam(value = "crop", required = false) String crop,
+                                        Authentication authentication) {
+        return response(accounts.uploadAvatar(currentUser.require(authentication), file, original, crop));
+    }
+
+    /** Original da própria foto ou capa, para reajustar o enquadramento. */
+    @GetMapping("/api/v1/me/{kind:avatar|banner}/original")
+    public ResponseEntity<Resource> original(@PathVariable String kind, Authentication authentication) {
+        AccountService.Avatar image = accounts.original(currentUser.require(authentication), "banner".equals(kind));
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(image.contentType()))
+                .header("X-Content-Type-Options", "nosniff")
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                .body(image.content());
     }
 
     @DeleteMapping("/api/v1/me/avatar")
@@ -88,8 +113,11 @@ public class AccountController {
     }
 
     @PostMapping(value = "/api/v1/me/banner", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public AccountResponse uploadBanner(@RequestParam("file") MultipartFile file, Authentication authentication) {
-        return response(accounts.uploadBanner(currentUser.require(authentication), file));
+    public AccountResponse uploadBanner(@RequestParam("file") MultipartFile file,
+                                        @RequestParam(value = "original", required = false) MultipartFile original,
+                                        @RequestParam(value = "crop", required = false) String crop,
+                                        Authentication authentication) {
+        return response(accounts.uploadBanner(currentUser.require(authentication), file, original, crop));
     }
 
     @DeleteMapping("/api/v1/me/banner")

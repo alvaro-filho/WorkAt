@@ -46,6 +46,20 @@ public class ProjectController {
                 .map(project -> ProjectResponse.from(project, user)).toList());
     }
 
+    private com.example.backend.services.ProjectOverviewService overviewService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setOverviewService(com.example.backend.services.ProjectOverviewService overviewService) {
+        this.overviewService = overviewService;
+    }
+
+    /** Tela Projetos: cada projeto com progresso, atrasos, equipe e capa. */
+    @GetMapping("/overview")
+    public ResponseEntity<List<com.example.backend.dto.ProjectOverview>> overview(Authentication authentication) {
+        User user = findAuthenticatedUser(authentication);
+        return ResponseEntity.ok(overviewService == null ? List.of() : overviewService.overview(user));
+    }
+
     @GetMapping("/{projectId}")
     public ResponseEntity<ProjectResponse> getProject(@PathVariable Long projectId, Authentication authentication) {
         User user = findAuthenticatedUser(authentication);
