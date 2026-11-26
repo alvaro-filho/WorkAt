@@ -10,7 +10,8 @@ services:
     rootDir: backend
     dockerfilePath: ./Dockerfile
     branch: master
-    healthCheckPath: /api/v1/showcase/public
+    # Rota leve, sem banco: responde mesmo com o Neon em repouso.
+    healthCheckPath: /api/v1/health
     autoDeploy: true
     envVars:
       - key: DB_URL
