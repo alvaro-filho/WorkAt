@@ -62,20 +62,20 @@ function MyTasksPage() {
   }, [tasks]);
 
   return (
-    <AppLayout title="Minhas tarefas" subtitle="O que está com você, em todos os projetos">
-      <div className="mx-auto max-w-3xl space-y-6">
+    <AppLayout title="Minhas tarefas" subtitle="O que está com você, em todos os projetos" flush>
+      <div>
         {error && (
-          <div role="alert" className="glass rounded-2xl p-4 text-sm text-destructive">
+          <div role="alert" className="border-b border-border p-4 text-sm text-destructive">
             {error}
           </div>
         )}
         {tasks === null && !error && (
-          <div className="glass h-40 animate-pulse rounded-2xl" aria-label="Carregando tarefas" />
+          <div className="m-4 h-40 animate-pulse rounded-2xl bg-white/5" aria-label="Carregando tarefas" />
         )}
         {tasks && tasks.length === 0 && (
-          <div className="glass rounded-2xl p-8 text-center">
-            <p className="font-medium">Nenhuma tarefa aberta com você.</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+          <div className="mx-auto max-w-sm px-4 py-12 text-center">
+            <p className="text-2xl font-extrabold">Nenhuma tarefa aberta com você</p>
+            <p className="mt-2 text-[15px] text-muted-foreground">
               Quando alguém atribuir uma tarefa a você, ela aparece aqui e em Notificações.
             </p>
             <Link to="/projetos" className="mt-4 inline-block text-sm text-primary hover:underline">
@@ -87,13 +87,13 @@ function MyTasksPage() {
           <section key={group.id} aria-labelledby={`group-${group.id}`}>
             <h2
               id={`group-${group.id}`}
-              className={`mb-2 flex items-center gap-2 text-sm font-semibold ${group.id === "late" ? "text-destructive" : ""}`}
+              className={`flex items-center gap-2 border-b border-border px-4 pt-4 pb-3 text-xl font-extrabold ${group.id === "late" ? "text-destructive" : ""}`}
             >
               {group.id === "late" && <AlertTriangle className="size-4" />}
               {group.title}
               <span className="font-normal text-muted-foreground">· {group.tasks.length}</span>
             </h2>
-            <ul className="glass divide-y divide-border overflow-hidden rounded-2xl">
+            <ul className="divide-y divide-border border-b border-border">
               {group.tasks.map((task) => (
                 <li key={task.id}>
                   <Link
@@ -102,7 +102,7 @@ function MyTasksPage() {
                     className="flex flex-wrap items-center gap-x-4 gap-y-1 p-4 hover:bg-white/[0.03]"
                   >
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{task.title}</span>
+                      <span className="block truncate text-[15px] font-bold">{task.title}</span>
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <FolderKanban className="size-3" /> {task.projectName ?? "Projeto"}
                       </span>

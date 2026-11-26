@@ -39,7 +39,8 @@ public class AccountController {
 
     public record AccountResponse(Long id, String fullName, String username, String email, String role,
                                   String avatarUrl, String bio, List<String> specialties, List<String> links,
-                                  LocalDateTime createdAt, long storageUsedBytes, long storageQuotaBytes) {
+                                  LocalDateTime createdAt, long storageUsedBytes, long storageQuotaBytes,
+                                  String bannerUrl) {
     }
 
     public record ProfileUpdate(String fullName, String bio, List<String> specialties, List<String> links) {
@@ -61,7 +62,7 @@ public class AccountController {
         return new AccountResponse(user.getId(), user.getFullName(), user.getUsername(), user.getEmail(),
                 user.getRole().name(), user.avatarUrl(), user.getBio(),
                 ProfileResponse.split(user.getSpecialties(), ","), ProfileResponse.split(user.getLinks(), "\n"),
-                user.getCreatedAt(), accounts.usedBytes(user), accounts.quotaBytes());
+                user.getCreatedAt(), accounts.usedBytes(user), accounts.quotaBytes(), user.bannerUrl());
     }
 
     @GetMapping("/api/v1/me")
@@ -84,6 +85,27 @@ public class AccountController {
     @DeleteMapping("/api/v1/me/avatar")
     public AccountResponse removeAvatar(Authentication authentication) {
         return response(accounts.removeAvatar(currentUser.require(authentication)));
+    }
+
+    @PostMapping(value = "/api/v1/me/banner", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public AccountResponse uploadBanner(@RequestParam("file") MultipartFile file, Authentication authentication) {
+        return response(accounts.uploadBanner(currentUser.require(authentication), file));
+    }
+
+    @DeleteMapping("/api/v1/me/banner")
+    public AccountResponse removeBanner(Authentication authentication) {
+        return response(accounts.removeBanner(currentUser.require(authentication)));
+    }
+
+    /** Capa pública do perfil. */
+    @GetMapping("/api/v1/users/{username}/banner")
+    public ResponseEntity<Resource> banner(@PathVariable String username) {
+        AccountService.Avatar banner = accounts.banner(username);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(banner.contentType()))
+                .header("X-Content-Type-Options", "nosniff")
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                .body(banner.content());
     }
 
     /** Foto pública (aparece no perfil, no feed e nos quadros). */

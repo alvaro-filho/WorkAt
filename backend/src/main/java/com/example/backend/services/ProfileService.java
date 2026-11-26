@@ -87,6 +87,6 @@ public class ProfileService {
 
         return new ProfileResponse(UserSummary.from(owner), me, owner.getCreatedAt(), portfolio, posts, projects,
                 hiddenPersonal, heatmap, owner.getBio(), ProfileResponse.split(owner.getSpecialties(), ","),
-                ProfileResponse.split(owner.getLinks(), "\n"));
+                ProfileResponse.split(owner.getLinks(), "\n"), owner.bannerUrl());
     }
 }

@@ -113,7 +113,7 @@ function CanvasPage() {
 
   if (taskId === undefined) {
     return (
-      <AppLayout title="Canvas Infinito" subtitle="Referências por tarefa">
+      <AppLayout layout="wide" title="Canvas Infinito" subtitle="Referências por tarefa">
         <div className="glass rounded-2xl p-8 text-center">
           <p className="font-medium">O Canvas fica dentro de cada tarefa.</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -140,7 +140,7 @@ function CanvasPage() {
             : undefined;
 
   return (
-    <AppLayout title="Canvas Infinito" subtitle={task ? task.title : "Carregando tarefa..."}>
+    <AppLayout layout="wide" title="Canvas Infinito" subtitle={task ? task.title : "Carregando tarefa..."}>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         {task && (
           <Link

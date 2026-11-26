@@ -59,27 +59,41 @@ function NotificationsPage() {
   };
 
   return (
-    <AppLayout title="Notificações" subtitle={unread ? `${unread} não lida(s)` : "Tudo em dia"}>
-      <div className="mx-auto max-w-3xl space-y-4">
-        <div className="flex justify-end">
-          <Button variant="outline" size="sm" disabled={unread === 0} onClick={() => void readAll()}>
-            <CheckCheck className="mr-1 size-4" /> Marcar todas como lidas
-          </Button>
-        </div>
+    <AppLayout
+      title="Notificações"
+      subtitle={unread ? `${unread} não lida(s)` : "Tudo em dia"}
+      flush
+      actions={
+        <button
+          type="button"
+          disabled={unread === 0}
+          onClick={() => void readAll()}
+          aria-label="Marcar todas como lidas"
+          title="Marcar todas como lidas"
+          className="rounded-full p-2 hover:bg-white/10 disabled:opacity-40"
+        >
+          <CheckCheck className="size-5" />
+        </button>
+      }
+    >
+      <div>
         {error && (
-          <div role="alert" className="glass rounded-2xl p-4 text-sm text-destructive">
+          <div role="alert" className="border-b border-border p-4 text-sm text-destructive">
             {error}
           </div>
         )}
-        {items === null && !error && <div className="glass h-40 animate-pulse rounded-2xl" />}
+        {items === null && !error && <div className="m-4 h-40 animate-pulse rounded-2xl bg-white/5" />}
         {items && items.length === 0 && (
-          <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
-            <Bell className="mx-auto mb-2 size-6" />
-            Nenhum aviso ainda. Convites, tarefas novas, revisões e prazos aparecem aqui.
+          <div className="mx-auto max-w-sm px-4 py-12 text-center">
+            <Bell className="mx-auto mb-3 size-8 text-muted-foreground" />
+            <p className="text-2xl font-extrabold">Nada por aqui ainda</p>
+            <p className="mt-2 text-[15px] text-muted-foreground">
+              Convites, tarefas novas, revisões, comentários e prazos aparecem aqui.
+            </p>
           </div>
         )}
         {items && items.length > 0 && (
-          <ul className="glass divide-y divide-border overflow-hidden rounded-2xl">
+          <ul className="divide-y divide-border border-b border-border">
             {items.map((item) => (
               <li key={item.id}>
                 <button
@@ -92,7 +106,7 @@ function NotificationsPage() {
                     className={`mt-1.5 size-2 shrink-0 rounded-full ${item.read ? "bg-transparent" : "bg-primary"}`}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className={`block text-sm ${item.read ? "text-muted-foreground" : "font-medium"}`}>
+                    <span className={`block text-[15px] leading-5 ${item.read ? "text-muted-foreground" : ""}`}>
                       {item.message}
                     </span>
                     <span className="text-xs text-muted-foreground">

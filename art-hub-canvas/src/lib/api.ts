@@ -154,6 +154,8 @@ export interface Profile {
   bio: string | null;
   specialties: string[];
   links: string[];
+  /** Capa do perfil (null = degradê padrão). */
+  bannerUrl: string | null;
 }
 
 export type ApiTaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE";
@@ -227,6 +229,7 @@ export interface Account {
   createdAt: string | null;
   storageUsedBytes: number;
   storageQuotaBytes: number;
+  bannerUrl: string | null;
 }
 
 /** Texto do backend que não serve para quem usa o site vira uma frase clara, pelo código HTTP. */
@@ -540,9 +543,12 @@ export const api = {
       { method: "PUT", body: JSON.stringify({ content }) },
     ),
   /** Feed Publicações: só o que é público, mais novo primeiro. before = id para a próxima página. */
-  feed: (before?: number) =>
+  feed: (before?: number, limit?: number) =>
     request<Post[]>(
-      `/feed${before ? `?before=${before}` : ""}`,
+      `/feed?${new URLSearchParams({
+        ...(before ? { before: String(before) } : {}),
+        ...(limit ? { limit: String(limit) } : {}),
+      }).toString()}`,
       { method: "GET" },
       { authFailure: "ignore", sendAuthorization: false },
     ),
@@ -560,6 +566,8 @@ export const api = {
     postId: number,
     payload: { title?: string; subtitle?: string; hiddenFromPortfolio?: boolean },
   ) => request<Post>(`/posts/${postId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  /** Uma publicação (pública para quem não tem login, se ela for pública). */
+  post: (postId: number) => request<Post>(`/posts/${postId}`, {}, { authFailure: "ignore" }),
   deletePost: (postId: number) => request<void>(`/posts/${postId}`, { method: "DELETE" }),
   // ---- Fluxo de trabalho ----
   myTasks: () => request<ApiTask[]>("/me/tasks"),
@@ -607,6 +615,12 @@ export const api = {
     return request<Account>("/me/avatar", { method: "POST", body: form });
   },
   removeAvatar: () => request<Account>("/me/avatar", { method: "DELETE" }),
+  uploadBanner: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<Account>("/me/banner", { method: "POST", body: form });
+  },
+  removeBanner: () => request<Account>("/me/banner", { method: "DELETE" }),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ message: string }>("/me/password", {
       method: "POST",

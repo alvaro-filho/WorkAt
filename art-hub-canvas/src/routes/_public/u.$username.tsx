@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CalendarDays, Check, ExternalLink, FolderKanban, Globe, ImageIcon, Lock, Pencil, Plus } from "lucide-react";
+import { CalendarDays, Check, ExternalLink, Globe, Link2, Lock } from "lucide-react";
 
 import { ArtImage } from "@/components/art/ArtPieces";
 import { ActivityHeatmap } from "@/components/dashboard/ActivityHeatmap";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { DefaultAside } from "@/components/layout/RightAside";
 import { PostCard } from "@/components/posts/PostCard";
 import { PostComposer } from "@/components/posts/PostComposer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError, type Post, type Profile, type ProfileProject } from "@/lib/api";
 import { projectTypeInfo, roleLabel } from "@/lib/project-labels";
 
@@ -18,12 +18,20 @@ export const Route = createFileRoute("/_public/u/$username")({
   component: ProfilePage,
 });
 
+type Tab = "posts" | "portfolio" | "projects" | "activity";
+
+/**
+ * Perfil no estilo das redes sociais: capa, foto sobre a capa, bio, links e abas.
+ * Visitantes (com ou sem login) veem só o que é público; projetos com NDA aparecem mascarados.
+ */
 function ProfilePage() {
   const { username } = Route.useParams();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>("posts");
+  const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -31,6 +39,7 @@ function ProfilePage() {
     setProfile(null);
     setNotFound(false);
     setError(null);
+    setTab("posts");
     api
       .profile(username)
       .then((loaded) => active && setProfile(loaded))
@@ -71,9 +80,7 @@ function ProfilePage() {
   const addPost = (post: Post) => {
     setNow(Date.now());
     setProfile((current) =>
-      current
-        ? { ...current, posts: [post, ...current.posts], portfolio: [post, ...current.portfolio] }
-        : current,
+      current ? { ...current, posts: [post, ...current.posts], portfolio: [post, ...current.portfolio] } : current,
     );
   };
 
@@ -88,14 +95,11 @@ function ProfilePage() {
 
   if (notFound || error) {
     return (
-      <AppLayout title="Perfil">
-        <div className="glass rounded-2xl p-8 text-center">
-          <p className="font-medium">{error ?? "Perfil não encontrado."}</p>
-          <Link
-            to="/publicacoes"
-            className="mt-3 inline-block text-sm text-primary hover:underline"
-          >
-            Ir para Publicações
+      <AppLayout title="Perfil" back>
+        <div className="mx-auto max-w-md rounded-2xl border border-border p-8 text-center">
+          <p className="font-semibold">{error ?? "Esta conta não existe."}</p>
+          <Link to="/explorar" className="mt-3 inline-block text-sm text-primary hover:underline">
+            Ir para Explorar
           </Link>
         </div>
       </AppLayout>
@@ -104,9 +108,13 @@ function ProfilePage() {
 
   if (!profile) {
     return (
-      <AppLayout title="Perfil">
-        <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
-          Carregando perfil...
+      <AppLayout title="Perfil" flush>
+        <div>
+          <div className="aspect-[3/1] animate-pulse bg-white/5" />
+          <div className="space-y-3 p-4">
+            <div className="-mt-16 size-32 animate-pulse rounded-full bg-white/10" />
+            <div className="h-6 w-48 animate-pulse rounded bg-white/10" />
+          </div>
         </div>
       </AppLayout>
     );
@@ -114,260 +122,277 @@ function ProfilePage() {
 
   const { user } = profile;
   const isCompany = user.role === "COMPANY";
-  const ownProjects = profile.projects.filter((project) => project.role === "OWNER").length;
+  const totalProjects = profile.projects.length + profile.hiddenPersonalProjects;
   const publicProjects = profile.projects.filter(
-    (project): project is ProfileProject & { id: number } =>
-      project.publicView && project.id !== null,
+    (project): project is ProfileProject & { id: number } => project.publicView && project.id !== null,
   );
+
+  const share = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt("Copie o link do perfil:", window.location.href);
+    }
+  };
+
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "posts", label: "Posts" },
+    { id: "portfolio", label: "Portfólio" },
+    { id: "projects", label: "Projetos" },
+    { id: "activity", label: "Atividade" },
+  ];
 
   return (
     <AppLayout
-      title={profile.me ? "Meu perfil" : user.fullName}
-      subtitle={`@${user.username} · ${isCompany ? "Estúdio / Empresa" : "Artista"}`}
+      title={user.fullName}
+      subtitle={`${profile.posts.length} ${profile.posts.length === 1 ? "publicação" : "publicações"}`}
+      back={!profile.me}
+      flush
+      aside={
+        <DefaultAside
+          extra={profile.me ? <FirstSteps profile={profile} onPublish={() => setComposerOpen(true)} /> : undefined}
+        />
+      }
     >
-      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-        <aside className="space-y-4">
-          {user.avatarUrl ? (
-            <img
-              src={user.avatarUrl}
-              alt={`Foto de ${user.fullName}`}
-              className="aspect-square w-40 rounded-full object-cover shadow-[var(--shadow-glow)] lg:w-full"
-            />
-          ) : (
-            <div className="gradient-primary flex aspect-square w-40 items-center justify-center rounded-full text-6xl font-semibold text-primary-foreground shadow-[var(--shadow-glow)] lg:w-full">
-              {user.fullName.slice(0, 1).toUpperCase()}
-            </div>
-          )}
-          <div>
-            <h2 className="text-2xl font-semibold leading-tight">{user.fullName}</h2>
-            <p className="text-lg text-muted-foreground">@{user.username}</p>
-          </div>
-          <Badge variant="outline">{isCompany ? "Estúdio / Empresa" : "Artista"}</Badge>
-          {profile.bio && <p className="text-sm whitespace-pre-wrap">{profile.bio}</p>}
-          {profile.specialties.length > 0 && (
-            <ul className="flex flex-wrap gap-1.5" aria-label="Especialidades">
-              {profile.specialties.map((item) => (
-                <li key={item}>
-                  <Badge variant="secondary" className="bg-white/10 font-normal">
-                    {item}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-          {profile.links.length > 0 && (
-            <ul className="space-y-1 text-sm" aria-label="Links">
-              {profile.links.map((link) => (
-                <li key={link}>
-                  <a
-                    href={link}
-                    target="_blank"
-                    rel="noopener noreferrer nofollow"
-                    className="inline-flex max-w-full items-center gap-1 text-primary hover:underline"
-                  >
-                    <ExternalLink className="size-3 shrink-0" />
-                    <span className="truncate">{link.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}</span>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-          {profile.me && (
-            <div className="grid gap-2">
-              <Button asChild variant="outline" className="w-full">
-                <Link to="/conta">
-                  <Pencil className="size-4" /> Editar perfil
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="w-full">
-                <Link to="/projetos">
-                  <Plus className="size-4" /> Novo projeto
-                </Link>
-              </Button>
-            </div>
-          )}
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li className="flex items-center gap-2">
-              <ImageIcon className="size-4" />
-              <span>
-                <span className="font-semibold text-foreground">{profile.posts.length}</span>{" "}
-                {profile.posts.length === 1 ? "publicação" : "publicações"}
-              </span>
-            </li>
-            <li className="flex items-center gap-2">
-              <FolderKanban className="size-4" />
-              <span>
-                <span className="font-semibold text-foreground">
-                  {profile.projects.length + profile.hiddenPersonalProjects}
-                </span>{" "}
-                projetos ({ownProjects} como dono)
-              </span>
-            </li>
-            {profile.memberSince && (
-              <li className="flex items-center gap-2">
-                <CalendarDays className="size-4" />
-                No WorkAt desde{" "}
-                {new Date(profile.memberSince).toLocaleDateString("pt-BR", {
-                  month: "long",
-                  year: "numeric",
-                })}
-              </li>
-            )}
-          </ul>
-        </aside>
-
-        <div className="min-w-0 space-y-8">
-          {profile.me && <FirstSteps profile={profile} onPublish={() => setComposerOpen(true)} />}
-          <Tabs defaultValue="portfolio">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <TabsList>
-                <TabsTrigger value="portfolio">Portfólio</TabsTrigger>
-                <TabsTrigger value="posts">Posts ({profile.posts.length})</TabsTrigger>
-                <TabsTrigger value="projects">
-                  Projetos ({profile.projects.length + profile.hiddenPersonalProjects})
-                </TabsTrigger>
-              </TabsList>
-              {profile.me && (
-                <Button
-                  size="sm"
-                  className="gradient-primary text-primary-foreground"
-                  onClick={() => setComposerOpen(true)}
-                >
-                  <Plus className="mr-1 size-4" /> Publicar
-                </Button>
-              )}
-            </div>
-
-            <TabsContent value="portfolio" className="space-y-6">
-              {publicProjects.length === 0 && profile.portfolio.length === 0 ? (
-                <div className="glass rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
-                  {profile.me
-                    ? "Seu portfólio ainda está vazio. Publique uma imagem pelo botão Publicar, ou ligue o WIP automático nas configurações de um projeto para ele aparecer aqui com todas as atualizações."
-                    : "Ainda não há nada no portfólio."}
-                </div>
-              ) : (
-                <>
-                  {publicProjects.length > 0 && (
-                    <section aria-labelledby="public-projects-title">
-                      <h3 id="public-projects-title" className="mb-3 text-sm font-semibold">
-                        Projetos públicos
-                      </h3>
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        {publicProjects.map((project) => (
-                          <Link
-                            key={project.id}
-                            to="/projetos/$projectId/publico"
-                            params={{ projectId: String(project.id) }}
-                            className="glass glass-hover block overflow-hidden rounded-2xl"
-                          >
-                            <ArtImage
-                              src={project.coverUrl}
-                              title={project.name ?? "Projeto"}
-                              className="h-44 w-full object-cover"
-                            />
-                            <div className="space-y-1 p-3">
-                              <p className="truncate text-sm font-medium">{project.name}</p>
-                              <p className="truncate text-xs text-muted-foreground">
-                                {projectTypeInfo(project.type).label}
-                                {project.role === "MEMBER" && project.ownerName
-                                  ? ` · de ${project.ownerName}`
-                                  : ""}
-                              </p>
-                            </div>
-                          </Link>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-                  {profile.portfolio.length > 0 && (
-                    <section aria-labelledby="portfolio-posts-title">
-                      <h3 id="portfolio-posts-title" className="mb-3 text-sm font-semibold">
-                        Artes
-                      </h3>
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        {profile.portfolio.map((post) => (
-                          <article key={post.id} className="glass overflow-hidden rounded-2xl">
-                            <ArtImage
-                              src={post.images[0]?.url ?? null}
-                              title={post.title ?? "Arte"}
-                              className="h-44 w-full object-cover"
-                            />
-                            <div className="space-y-1 p-3">
-                              <p className="truncate text-sm font-medium">
-                                {post.title ?? "Sem título"}
-                              </p>
-                              <p className="truncate text-xs text-muted-foreground">
-                                {post.subtitle ??
-                                  (post.project ? post.project.name : "Post avulso")}
-                              </p>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-                </>
-              )}
-            </TabsContent>
-
-            <TabsContent value="posts">
-              {profile.posts.length === 0 ? (
-                <div className="glass rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
-                  {profile.me ? "Você ainda não publicou nada." : "Nenhuma publicação ainda."}
-                </div>
-              ) : (
-                <ol
-                  className="glass divide-y divide-border overflow-hidden rounded-2xl"
-                  aria-label="Posts"
-                >
-                  {profile.posts.map((post) => (
-                    <PostCard
-                      key={post.id}
-                      post={post}
-                      now={now}
-                      onChanged={changePost}
-                      onDeleted={removePost}
-                    />
-                  ))}
-                </ol>
-              )}
-            </TabsContent>
-
-            <TabsContent value="projects">
-              {profile.projects.length === 0 && profile.hiddenPersonalProjects === 0 ? (
-                <div className="glass rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
-                  Nenhum projeto ainda.
-                </div>
-              ) : (
-                <div className="grid gap-3 md:grid-cols-2">
-                  {profile.projects.map((project, index) => (
-                    <ProjectCard
-                      key={project.id ?? `nda-${index}`}
-                      project={project}
-                      me={profile.me}
-                    />
-                  ))}
-                </div>
-              )}
-              {profile.hiddenPersonalProjects > 0 && (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  + {profile.hiddenPersonalProjects}{" "}
-                  {profile.hiddenPersonalProjects === 1 ? "projeto pessoal" : "projetos pessoais"}{" "}
-                  (privados)
-                </p>
-              )}
-            </TabsContent>
-          </Tabs>
-
-          <section aria-label="Atividade">
-            <ActivityHeatmap data={heatmap} />
-          </section>
-        </div>
+      {/* Capa: 3:1 (200px de altura na coluna de 600px) */}
+      <div className="aspect-[3/1] w-full overflow-hidden bg-gradient-to-br from-primary/60 via-primary/20 to-neon/30">
+        {profile.bannerUrl && <img src={profile.bannerUrl} alt="" className="size-full object-cover" />}
       </div>
+
+      <div className="px-4 pt-3">
+        {/* Foto sobre a capa (metade para fora) e a ação principal à direita */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="relative z-10 -mt-[clamp(40px,11vw,70px)] shrink-0">
+            {user.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={`Foto de ${user.fullName}`}
+                className="size-[clamp(80px,22vw,134px)] rounded-full border-4 border-background bg-background object-cover"
+              />
+            ) : (
+              <div className="gradient-primary flex size-[clamp(80px,22vw,134px)] items-center justify-center rounded-full border-4 border-background text-[clamp(28px,7vw,48px)] font-bold text-primary-foreground">
+                {user.fullName.slice(0, 1).toUpperCase()}
+              </div>
+            )}
+          </div>
+          {profile.me ? (
+            <Button asChild variant="outline" className="h-9 rounded-full px-4 font-bold">
+              <Link to="/conta">Editar perfil</Link>
+            </Button>
+          ) : (
+            <Button variant="outline" className="h-9 rounded-full px-4 font-bold" onClick={() => void share()}>
+              {copied ? <Check className="mr-1 size-4" /> : <Link2 className="mr-1 size-4" />}
+              {copied ? "Link copiado" : "Compartilhar"}
+            </Button>
+          )}
+        </div>
+
+        {/* Identidade */}
+        <div className="mt-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="text-xl leading-6 font-extrabold">{user.fullName}</h2>
+            <span className="rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+              {isCompany ? "Estúdio" : "Artista"}
+            </span>
+          </div>
+          <p className="text-[15px] text-muted-foreground">@{user.username}</p>
+        </div>
+
+        {profile.bio && <p className="mt-3 text-[15px] leading-5 whitespace-pre-wrap">{profile.bio}</p>}
+
+        {profile.specialties.length > 0 && (
+          <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Especialidades">
+            {profile.specialties.map((item) => (
+              <li key={item} className="rounded-full bg-white/[0.08] px-3 py-1 text-[13px]">
+                {item}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Linha de informações */}
+        <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[15px] text-muted-foreground">
+          {profile.links.map((link) => (
+            <li key={link} className="min-w-0">
+              <a
+                href={link}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className="inline-flex max-w-full items-center gap-1 text-primary hover:underline"
+              >
+                <ExternalLink className="size-[18px] shrink-0 text-muted-foreground" />
+                <span className="truncate">{link.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}</span>
+              </a>
+            </li>
+          ))}
+          {profile.memberSince && (
+            <li className="inline-flex items-center gap-1">
+              <CalendarDays className="size-[18px]" />
+              Entrou em {new Date(profile.memberSince).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+            </li>
+          )}
+        </ul>
+
+        {/* Números */}
+        <p className="mt-3 flex gap-5 text-[15px]">
+          <button type="button" onClick={() => setTab("posts")} className="hover:underline">
+            <span className="font-bold">{profile.posts.length}</span>{" "}
+            <span className="text-muted-foreground">publicações</span>
+          </button>
+          <button type="button" onClick={() => setTab("projects")} className="hover:underline">
+            <span className="font-bold">{totalProjects}</span> <span className="text-muted-foreground">projetos</span>
+          </button>
+        </p>
+      </div>
+
       {profile.me && (
-        <PostComposer open={composerOpen} onOpenChange={setComposerOpen} onCreated={addPost} />
+        <div className="px-4 pt-4 lg:hidden">
+          <FirstSteps profile={profile} onPublish={() => setComposerOpen(true)} />
+        </div>
       )}
+
+      {/* Abas: o traço fica do tamanho do rótulo */}
+      <div role="tablist" aria-label="Seções do perfil" className="mt-4 flex border-b border-border">
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            onClick={() => setTab(item.id)}
+            className="flex h-[53px] flex-1 items-center justify-center text-[15px] transition-colors hover:bg-white/[0.06]"
+          >
+            <span
+              className={`relative flex h-full items-center ${tab === item.id ? "font-bold text-foreground" : "font-medium text-muted-foreground"}`}
+            >
+              {item.label}
+              {tab === item.id && (
+                <span className="absolute inset-x-0 bottom-0 h-1 rounded-full bg-primary" aria-hidden="true" />
+              )}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {tab === "posts" &&
+        (profile.posts.length === 0 ? (
+          <EmptyTab
+            title={profile.me ? "Você ainda não publicou nada" : "Nenhuma publicação ainda"}
+            text={
+              profile.me
+                ? "Use o botão Publicar no menu, ou ligue o WIP automático em um projeto."
+                : "Quando esta conta publicar algo, aparece aqui."
+            }
+          />
+        ) : (
+          <ol className="divide-y divide-border border-b border-border" aria-label="Posts">
+            {profile.posts.map((post) => (
+              <PostCard key={post.id} post={post} now={now} onChanged={changePost} onDeleted={removePost} />
+            ))}
+          </ol>
+        ))}
+
+      {tab === "portfolio" &&
+        (profile.portfolio.length === 0 && publicProjects.length === 0 ? (
+          <EmptyTab
+            title="Portfólio vazio"
+            text={
+              profile.me
+                ? "Publique artes ou abra um projeto ao público para montar seu portfólio."
+                : "Ainda não há nada no portfólio."
+            }
+          />
+        ) : (
+          <div>
+            {profile.portfolio.length > 0 && (
+              <ul className="grid grid-cols-3 gap-0.5" aria-label="Artes">
+                {profile.portfolio
+                  .filter((post) => post.images.length > 0)
+                  .map((post) => (
+                    <li key={post.id}>
+                      <Link
+                        to="/publicacao/$postId"
+                        params={{ postId: String(post.id) }}
+                        className="group block aspect-square overflow-hidden bg-white/5"
+                        aria-label={post.title ?? "Arte"}
+                      >
+                        <ArtImage
+                          src={post.images[0]?.url ?? null}
+                          title={post.title ?? "Arte"}
+                          className="size-full object-cover transition-transform group-hover:scale-105"
+                        />
+                      </Link>
+                    </li>
+                  ))}
+              </ul>
+            )}
+            {publicProjects.length > 0 && (
+              <section aria-labelledby="public-projects-title" className="border-t border-border p-4">
+                <h3 id="public-projects-title" className="mb-3 text-xl font-extrabold">
+                  Projetos públicos
+                </h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {publicProjects.map((project) => (
+                    <Link
+                      key={project.id}
+                      to="/projetos/$projectId/publico"
+                      params={{ projectId: String(project.id) }}
+                      className="block overflow-hidden rounded-2xl border border-border hover:bg-white/[0.03]"
+                    >
+                      <ArtImage src={project.coverUrl} title={project.name ?? "Projeto"} className="h-36 w-full object-cover" />
+                      <div className="p-3">
+                        <p className="truncate text-[15px] font-bold">{project.name}</p>
+                        <p className="truncate text-[13px] text-muted-foreground">
+                          {projectTypeInfo(project.type).label}
+                          {project.role === "MEMBER" && project.ownerName ? ` · de ${project.ownerName}` : ""}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        ))}
+
+      {tab === "projects" && (
+        <div className="p-4">
+          {totalProjects === 0 ? (
+            <EmptyTab title="Nenhum projeto ainda" text="" />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {profile.projects.map((project, index) => (
+                <ProjectCard key={project.id ?? `nda-${index}`} project={project} me={profile.me} />
+              ))}
+            </div>
+          )}
+          {profile.hiddenPersonalProjects > 0 && (
+            <p className="mt-3 text-[13px] text-muted-foreground">
+              + {profile.hiddenPersonalProjects}{" "}
+              {profile.hiddenPersonalProjects === 1 ? "projeto pessoal" : "projetos pessoais"} (privados)
+            </p>
+          )}
+        </div>
+      )}
+
+      {tab === "activity" && (
+        <section aria-label="Atividade" className="p-4">
+          <ActivityHeatmap data={heatmap} />
+        </section>
+      )}
+      {profile.me && <PostComposer open={composerOpen} onOpenChange={setComposerOpen} onCreated={addPost} />}
     </AppLayout>
+  );
+}
+
+function EmptyTab({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="mx-auto max-w-sm px-4 py-12 text-center">
+      <p className="text-2xl font-extrabold">{title}</p>
+      {text && <p className="mt-2 text-sm text-muted-foreground">{text}</p>}
+    </div>
   );
 }
 

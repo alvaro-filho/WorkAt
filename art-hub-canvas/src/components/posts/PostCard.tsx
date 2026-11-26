@@ -191,7 +191,7 @@ export function PostCard({
       </Link>
       <article className="min-w-0 flex-1">
         <header className="flex items-start gap-2">
-          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1 text-sm">
+          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1 text-[15px] leading-5">
             <Link
               to="/u/$username"
               params={{ username: post.author.username }}
@@ -251,14 +251,25 @@ export function PostCard({
             </DropdownMenu>
           )}
         </header>
-        {context && <p className="mt-0.5 text-sm text-muted-foreground">{context}</p>}
+        {context && <p className="mt-0.5 text-[15px] leading-5 text-muted-foreground">{context}</p>}
         {post.title && post.kind !== "PROJECT_PUBLISHED" && (
-          <h3 className="mt-2 font-semibold">{post.title}</h3>
+          <h3 className="mt-1 text-[15px] leading-5 font-bold">
+            <Link to="/publicacao/$postId" params={{ postId: String(post.id) }} className="hover:underline">
+              {post.title}
+            </Link>
+          </h3>
         )}
         {post.subtitle && (
-          <p className="mt-1 text-sm whitespace-pre-wrap text-muted-foreground">{post.subtitle}</p>
+          <p className="mt-1 text-[15px] leading-5 whitespace-pre-wrap">{post.subtitle}</p>
         )}
-        <PostImages post={post} />
+        <Link
+          to="/publicacao/$postId"
+          params={{ postId: String(post.id) }}
+          aria-label={`Abrir ${post.title ?? "publicação"}`}
+          className="block"
+        >
+          <PostImages post={post} />
+        </Link>
         {(linksToProject || !post.isPublic || (mine && post.hiddenFromPortfolio)) && (
           <footer className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             {linksToProject && (

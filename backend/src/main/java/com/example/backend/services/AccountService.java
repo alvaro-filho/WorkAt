@@ -49,6 +49,7 @@ public class AccountService {
     private static final Map<String, String> AVATAR_TYPES = Map.of(
             "png", "image/png", "jpg", "image/jpeg", "jpeg", "image/jpeg", "webp", "image/webp");
     private static final long AVATAR_MAX_BYTES = 5L * 1024 * 1024;
+    private static final long BANNER_MAX_BYTES = 8L * 1024 * 1024;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
@@ -150,33 +151,72 @@ public class AccountService {
         return userRepository.save(user);
     }
 
-    @Transactional
-    public User uploadAvatar(User user, MultipartFile file) {
+    private record StoredImage(String storedName, String contentType) {
+    }
+
+    /** Grava uma imagem de perfil (PNG, JPG ou WEBP) e devolve o nome salvo. */
+    private StoredImage storeProfileImage(MultipartFile file, long maxBytes, String what) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Escolha uma imagem.");
         }
-        if (file.getSize() > AVATAR_MAX_BYTES) {
-            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "A foto deve ter no máximo 5 MB.");
+        if (file.getSize() > maxBytes) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,
+                    "A " + what + " deve ter no máximo " + (maxBytes / (1024 * 1024)) + " MB.");
         }
         String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
         String extension = name.contains(".") ? name.substring(name.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT) : "";
         String contentType = AVATAR_TYPES.get(extension);
         if (contentType == null) {
-            throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "A foto precisa ser PNG, JPG ou WEBP.");
+            throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                    "A " + what + " precisa ser PNG, JPG ou WEBP.");
         }
-        String stored;
         try {
-            stored = storage.save(file.getInputStream(), extension);
+            return new StoredImage(storage.save(file.getInputStream(), extension), contentType);
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Não foi possível ler a imagem.");
         }
+    }
+
+    @Transactional
+    public User uploadAvatar(User user, MultipartFile file) {
+        StoredImage image = storeProfileImage(file, AVATAR_MAX_BYTES, "foto");
         String old = user.getAvatarStoredName();
-        user.setAvatarStoredName(stored);
-        user.setAvatarContentType(contentType);
+        user.setAvatarStoredName(image.storedName());
+        user.setAvatarContentType(image.contentType());
         user.setAvatarUpdatedAt(LocalDateTime.now());
         User saved = userRepository.save(user);
         storage.delete(old);
         return saved;
+    }
+
+    @Transactional
+    public User uploadBanner(User user, MultipartFile file) {
+        StoredImage image = storeProfileImage(file, BANNER_MAX_BYTES, "capa");
+        String old = user.getBannerStoredName();
+        user.setBannerStoredName(image.storedName());
+        user.setBannerContentType(image.contentType());
+        user.setBannerUpdatedAt(LocalDateTime.now());
+        User saved = userRepository.save(user);
+        storage.delete(old);
+        return saved;
+    }
+
+    @Transactional
+    public User removeBanner(User user) {
+        storage.delete(user.getBannerStoredName());
+        user.setBannerStoredName(null);
+        user.setBannerContentType(null);
+        user.setBannerUpdatedAt(LocalDateTime.now());
+        return userRepository.save(user);
+    }
+
+    @Transactional(readOnly = true)
+    public Avatar banner(String username) {
+        User user = userRepository.findByUsername(username).filter(u -> !u.isDeleted())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Capa não encontrada."));
+        Resource content = storage.load(user.getBannerStoredName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Capa não encontrada."));
+        return new Avatar(content, user.getBannerContentType());
     }
 
     @Transactional
@@ -330,6 +370,7 @@ public class AccountService {
         }
         notificationRepository.deleteAllOf(user);
         storage.delete(user.getAvatarStoredName());
+        storage.delete(user.getBannerStoredName());
 
         String suffix = user.getId() + "-" + Long.toHexString(RANDOM.nextLong());
         user.setUsername("excluido-" + suffix);
@@ -341,6 +382,8 @@ public class AccountService {
         user.setLinks(null);
         user.setAvatarStoredName(null);
         user.setAvatarContentType(null);
+        user.setBannerStoredName(null);
+        user.setBannerContentType(null);
         user.setDeleted(true);
         userRepository.save(user);
     }

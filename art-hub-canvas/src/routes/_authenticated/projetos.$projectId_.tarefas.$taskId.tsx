@@ -144,7 +144,7 @@ function TaskPage() {
 
   if (loading) {
     return (
-      <AppLayout title="Tarefa">
+      <AppLayout layout="wide" title="Tarefa">
         <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
           Carregando tarefa...
         </div>
@@ -154,7 +154,7 @@ function TaskPage() {
 
   if (notFound || !project || !task) {
     return (
-      <AppLayout title="Tarefa">
+      <AppLayout layout="wide" title="Tarefa">
         <div className="glass rounded-2xl p-8 text-center">
           <p className="font-medium">{error ?? "Tarefa não encontrada."}</p>
           {!error && (
@@ -214,7 +214,7 @@ function TaskPage() {
   };
 
   return (
-    <AppLayout title={task.title} subtitle={project.name}>
+    <AppLayout layout="wide" title={task.title} subtitle={project.name}>
       <Link
         to="/projetos/$projectId"
         params={{ projectId: String(project.id) }}

@@ -54,6 +54,16 @@ public class User {
     @Column(name = "avatar_updated_at")
     private LocalDateTime avatarUpdatedAt;
 
+    /** Capa do perfil (faixa no topo, estilo rede social). */
+    @Column(name = "banner_stored_name")
+    private String bannerStoredName;
+
+    @Column(name = "banner_content_type", length = 60)
+    private String bannerContentType;
+
+    @Column(name = "banner_updated_at")
+    private LocalDateTime bannerUpdatedAt;
+
     /** Conta excluída: os dados pessoais foram apagados e o login não funciona mais. */
     @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean deleted = false;
@@ -73,6 +83,22 @@ public class User {
     public void setAvatarContentType(String avatarContentType) { this.avatarContentType = avatarContentType; }
     public LocalDateTime getAvatarUpdatedAt() { return avatarUpdatedAt; }
     public void setAvatarUpdatedAt(LocalDateTime avatarUpdatedAt) { this.avatarUpdatedAt = avatarUpdatedAt; }
+    public String getBannerStoredName() { return bannerStoredName; }
+    public void setBannerStoredName(String bannerStoredName) { this.bannerStoredName = bannerStoredName; }
+    public String getBannerContentType() { return bannerContentType; }
+    public void setBannerContentType(String bannerContentType) { this.bannerContentType = bannerContentType; }
+    public LocalDateTime getBannerUpdatedAt() { return bannerUpdatedAt; }
+    public void setBannerUpdatedAt(LocalDateTime bannerUpdatedAt) { this.bannerUpdatedAt = bannerUpdatedAt; }
+
+    /** Endereço público da capa (null = o site mostra um degradê). */
+    public String bannerUrl() {
+        if (bannerStoredName == null || username == null) {
+            return null;
+        }
+        long version = bannerUpdatedAt == null ? 0 : bannerUpdatedAt.toEpochSecond(java.time.ZoneOffset.UTC);
+        return "/api/v1/users/" + username + "/banner?v=" + version;
+    }
+
     public boolean isDeleted() { return deleted; }
     public void setDeleted(boolean deleted) { this.deleted = deleted; }
 

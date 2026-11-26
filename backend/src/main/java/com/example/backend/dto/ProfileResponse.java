@@ -20,7 +20,8 @@ public record ProfileResponse(
         List<HeatmapDTO> heatmap,
         String bio,
         List<String> specialties,
-        List<String> links
+        List<String> links,
+        String bannerUrl
 ) {
     public static List<String> split(String text, String separator) {
         if (text == null || text.isBlank()) {

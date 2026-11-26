@@ -69,7 +69,8 @@ public class PostController {
 
     @GetMapping("/api/v1/posts/{postId}")
     public PostResponse get(@PathVariable Long postId, Authentication authentication) {
-        return postService.get(postId, requireUser(authentication));
+        // Pública para publicações públicas (página da arte aberta por link); as outras só com login.
+        return postService.get(postId, optionalUser(authentication));
     }
 
     @PatchMapping("/api/v1/posts/{postId}")

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Download, ImagePlus, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, Download, HardDrive, ImagePlus, KeyRound, ShieldAlert, Trash2, UserRound, type LucideIcon } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
@@ -24,15 +24,23 @@ function megabytes(bytes: number) {
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
-    <section className="glass space-y-4 rounded-2xl p-5">
-      <div>
-        <h2 className="text-base font-semibold">{title}</h2>
-        {description && <p className="text-sm text-muted-foreground">{description}</p>}
+    <section className="space-y-5 px-4 pb-8">
+      <div className="pt-1">
+        <h2 className="sr-only">{title}</h2>
+        {description && <p className="text-[13px] text-muted-foreground">{description}</p>}
       </div>
       {children}
     </section>
   );
 }
+
+type SectionId = "perfil" | "espaco" | "senha" | "dados";
+const SECTIONS: { id: SectionId; label: string; hint: string; icon: LucideIcon }[] = [
+  { id: "perfil", label: "Perfil público", hint: "Foto, capa, nome, bio, especialidades e links.", icon: UserRound },
+  { id: "espaco", label: "Espaço usado", hint: "Quanto os seus arquivos ocupam da sua cota.", icon: HardDrive },
+  { id: "senha", label: "Altere sua senha", hint: "Troque a senha a qualquer momento.", icon: KeyRound },
+  { id: "dados", label: "Seus dados e a conta", hint: "Baixe uma cópia dos seus dados ou exclua a conta.", icon: ShieldAlert },
+];
 
 function Feedback({ ok, error }: { ok: string | null; error: string | null }) {
   if (error)
@@ -56,6 +64,8 @@ function AccountPage() {
   const navigate = useNavigate();
   const [account, setAccount] = useState<Account | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // No celular, null = mostrando a lista; no computador, a seção aberta (Perfil por padrão).
+  const [section, setSection] = useState<SectionId | null>(null);
 
   useEffect(() => {
     api
@@ -71,31 +81,80 @@ function AccountPage() {
 
   if (loadError)
     return (
-      <AppLayout title="Minha conta">
-        <div role="alert" className="glass mx-auto max-w-2xl rounded-2xl p-4 text-sm text-destructive">
+      <AppLayout title="Minha conta" layout="wide">
+        <div role="alert" className="text-sm text-destructive">
           {loadError}
         </div>
       </AppLayout>
     );
   if (!account)
     return (
-      <AppLayout title="Minha conta">
-        <div className="glass mx-auto h-64 max-w-2xl animate-pulse rounded-2xl" />
+      <AppLayout title="Minha conta" layout="wide">
+        <div className="h-64 animate-pulse rounded-2xl bg-white/5" />
       </AppLayout>
     );
 
   return (
-    <AppLayout title="Minha conta" subtitle={`@${account.username} · ${account.email}`}>
-      <div className="mx-auto max-w-2xl space-y-5">
-        <ProfileSection account={account} onSaved={applyAccount} />
-        <StorageSection account={account} />
-        <PasswordSection />
-        <DataSection
-          onDeleted={() => {
-            logout();
-            void navigate({ to: "/login", replace: true });
-          }}
-        />
+    <AppLayout title="Minha conta" subtitle={`@${account.username} · ${account.email}`} layout="wide" flush>
+      <div className="flex min-h-[calc(100vh-53px)]">
+        {/* Lista de seções (no celular some quando uma seção está aberta) */}
+        <nav
+          aria-label="Seções da conta"
+          className={`w-full shrink-0 border-border md:block md:w-[360px] md:border-r ${section ? "hidden" : "block"}`}
+        >
+          <ul>
+            {SECTIONS.map((item) => {
+              const active = (section ?? "perfil") === item.id;
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSection(item.id)}
+                    aria-current={active ? "true" : undefined}
+                    className={`flex w-full items-center gap-4 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.04] ${
+                      active ? "md:border-r-2 md:border-primary md:bg-white/[0.06]" : ""
+                    }`}
+                  >
+                    <item.icon className="size-5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15px]">{item.label}</span>
+                      <span className="block text-[13px] text-muted-foreground">{item.hint}</span>
+                    </span>
+                    <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        {/* Seção aberta */}
+        <div className={`min-w-0 flex-1 ${section ? "block" : "hidden md:block"}`}>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <button
+              type="button"
+              aria-label="Voltar para a lista"
+              onClick={() => setSection(null)}
+              className="-ml-2 rounded-full p-2 hover:bg-white/10 md:hidden"
+            >
+              <ArrowLeft className="size-5" />
+            </button>
+            <h2 className="text-xl font-extrabold">
+              {SECTIONS.find((item) => item.id === (section ?? "perfil"))!.label}
+            </h2>
+          </div>
+          {(section ?? "perfil") === "perfil" && <ProfileSection account={account} onSaved={applyAccount} />}
+          {section === "espaco" && <StorageSection account={account} />}
+          {section === "senha" && <PasswordSection />}
+          {section === "dados" && (
+            <DataSection
+              onDeleted={() => {
+                logout();
+                void navigate({ to: "/login", replace: true });
+              }}
+            />
+          )}
+        </div>
       </div>
     </AppLayout>
   );
@@ -110,6 +169,7 @@ function ProfileSection({ account, onSaved }: { account: Account; onSaved: (a: A
   const [ok, setOk] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const bannerInput = useRef<HTMLInputElement>(null);
 
   const run = async (action: () => Promise<Account>, message: string) => {
     setBusy(true);
@@ -141,6 +201,34 @@ function ProfileSection({ account, onSaved }: { account: Account; onSaved: (a: A
 
   return (
     <Section title="Perfil público" description="É o que aparece em /u/seu-usuario, para qualquer pessoa.">
+      <div className="space-y-2">
+        <p className="text-sm font-medium">Capa</p>
+        <div className="relative aspect-[3/1] w-full overflow-hidden rounded-xl bg-gradient-to-br from-primary/60 via-primary/20 to-neon/30">
+          {account.bannerUrl && <img src={account.bannerUrl} alt="" className="size-full object-cover" />}
+        </div>
+        <input
+          ref={bannerInput}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void run(() => api.uploadBanner(file), "Capa atualizada.");
+          }}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => bannerInput.current?.click()}>
+            <ImagePlus className="mr-1 size-4" /> {account.bannerUrl ? "Trocar capa" : "Enviar capa"}
+          </Button>
+          {account.bannerUrl && (
+            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void run(() => api.removeBanner(), "Capa removida.")}>
+              Remover
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground">Formato largo (3:1), PNG, JPG ou WEBP, até 8 MB.</span>
+        </div>
+      </div>
       <div className="flex flex-wrap items-center gap-4">
         <UserAvatar name={account.fullName} src={account.avatarUrl} size="lg" />
         <div className="flex flex-wrap gap-2">

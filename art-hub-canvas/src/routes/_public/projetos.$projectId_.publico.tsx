@@ -58,7 +58,7 @@ function PublicProjectPage() {
 
   if (notFound || (error && !project)) {
     return (
-      <AppLayout title="Projeto">
+      <AppLayout layout="wide" title="Projeto">
         <div className="glass rounded-2xl p-8 text-center">
           <p className="font-medium">{error ?? "Projeto não encontrado ou privado."}</p>
           <Link
@@ -74,7 +74,7 @@ function PublicProjectPage() {
 
   if (!project) {
     return (
-      <AppLayout title="Projeto">
+      <AppLayout layout="wide" title="Projeto">
         <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
           Carregando projeto...
         </div>
@@ -86,7 +86,7 @@ function PublicProjectPage() {
   const people = [...(project.owner ? [project.owner] : []), ...project.members];
 
   return (
-    <AppLayout title={project.name} subtitle={`${info.label} · visão pública`}>
+    <AppLayout layout="wide" title={project.name} subtitle={`${info.label} · visão pública`}>
       {project.viewerParticipates && (
         <Link
           to="/projetos/$projectId"

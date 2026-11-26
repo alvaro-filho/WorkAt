@@ -97,7 +97,7 @@ function ProjectPage() {
 
   if (loading && !project) {
     return (
-      <AppLayout title="Projeto">
+      <AppLayout layout="wide" title="Projeto">
         <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
           Carregando projeto...
         </div>
@@ -107,7 +107,7 @@ function ProjectPage() {
 
   if (notFound || !project) {
     return (
-      <AppLayout title="Projeto">
+      <AppLayout layout="wide" title="Projeto">
         <div className="glass rounded-2xl p-8 text-center">
           <p className="font-medium">{error ?? "Projeto não encontrado."}</p>
           {!error && (
@@ -155,7 +155,7 @@ function ProjectPage() {
         ];
 
   return (
-    <AppLayout
+    <AppLayout layout="wide"
       title={project.name}
       subtitle={`${typeInfo.label} · ${roleLabel(project.myRole, project.type)}`}
     >

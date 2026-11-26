@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowUp, Lock, Plus, RefreshCw } from "lucide-react";
+import { ArrowUp, ImagePlus, RefreshCw } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PostCard, UserAvatar } from "@/components/posts/PostCard";
@@ -10,7 +10,7 @@ import { api, type Post } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 
 export const Route = createFileRoute("/_public/publicacoes")({
-  head: () => ({ meta: [{ title: "Publicações — WorkAt" }] }),
+  head: () => ({ meta: [{ title: "Início — WorkAt" }] }),
   component: FeedPage,
 });
 
@@ -30,7 +30,7 @@ function FeedPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [composerOpen, setComposerOpen] = useState(false);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const knownIds = useRef<Set<number>>(new Set());
   const topRef = useRef<HTMLDivElement>(null);
 
@@ -107,160 +107,118 @@ function FeedPage() {
   const deleted = (postId: number) =>
     setPosts((current) => (current ?? []).filter((item) => item.id !== postId));
 
-  // Quem mais publicou no que está carregado, para a coluna lateral (como "Quem seguir" no X).
-  const topArtists = useMemo(() => {
-    const counts = new Map<string, { name: string; username: string; count: number }>();
-    for (const post of posts ?? []) {
-      const entry = counts.get(post.author.username) ?? {
-        name: post.author.fullName,
-        username: post.author.username,
-        count: 0,
-      };
-      entry.count += 1;
-      counts.set(post.author.username, entry);
-    }
-    return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 5);
-  }, [posts]);
-
   return (
-    <AppLayout title="Publicações" subtitle="WIPs e posts da comunidade, ao vivo">
-      <div ref={topRef} className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="min-w-0">
-          <div className="glass sticky top-[4.25rem] z-10 mb-4 flex items-center justify-between gap-3 rounded-2xl px-4 py-3">
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold">Feed</h2>
-              <p className="truncate text-xs text-muted-foreground">
-                Atualiza sozinho · WIPs de projetos públicos e posts avulsos
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label="Atualizar feed"
-                title="Atualizar"
-                disabled={refreshing}
-                onClick={() => void refresh()}
-              >
-                <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
-              </Button>
-              {isAuthenticated ? (
-                <Button
-                  size="sm"
-                  className="gradient-primary text-primary-foreground"
-                  onClick={() => setComposerOpen(true)}
-                >
-                  <Plus className="mr-1 size-4" /> Publicar
-                </Button>
-              ) : (
-                <Button asChild size="sm" className="gradient-primary text-primary-foreground">
-                  <Link to="/login">
-                    Entrar para publicar
-                  </Link>
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {incoming.length > 0 && (
-            <div className="sticky top-[8.5rem] z-10 mb-3 flex justify-center">
+    <AppLayout
+      title="Início"
+      flush
+      actions={
+        <button
+          type="button"
+          aria-label="Atualizar"
+          title="Atualizar"
+          disabled={refreshing}
+          onClick={() => void refresh()}
+          className="rounded-full p-2 hover:bg-white/10"
+        >
+          <RefreshCw className={`size-5 ${refreshing ? "animate-spin" : ""}`} />
+        </button>
+      }
+    >
+      <div ref={topRef} />
+      {isAuthenticated && user ? (
+        <div className="flex gap-3 border-b border-border px-4 pt-3 pb-2">
+          <UserAvatar name={user.fullName ?? user.username} src={user.avatarUrl} size="md" />
+          <div className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => setComposerOpen(true)}
+              className="w-full py-2 text-left text-xl text-muted-foreground"
+            >
+              O que você está criando?
+            </button>
+            <div className="flex items-center justify-between border-t border-border pt-2">
               <button
                 type="button"
-                onClick={showIncoming}
-                className="gradient-primary inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-primary-foreground shadow-[var(--shadow-glow)]"
+                aria-label="Adicionar imagem"
+                onClick={() => setComposerOpen(true)}
+                className="rounded-full p-2 text-primary hover:bg-primary/10"
               >
-                <ArrowUp className="size-4" />
-                {incoming.length === 1
-                  ? "1 nova publicação"
-                  : `${incoming.length} novas publicações`}
+                <ImagePlus className="size-5" />
               </button>
-            </div>
-          )}
-
-          {error && (
-            <div role="alert" className="glass mb-4 rounded-2xl p-4 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
-          {posts === null && !error ? (
-            <div className="space-y-3">
-              {[0, 1, 2].map((index) => (
-                <div key={index} className="glass h-72 animate-pulse rounded-2xl" />
-              ))}
-            </div>
-          ) : posts && posts.length === 0 ? (
-            <div className="glass rounded-2xl p-8 text-center text-sm text-muted-foreground">
-              Nada publicado ainda. Publique uma imagem pelo botão acima ou ligue o WIP automático
-              num projeto: cada imagem enviada nas tarefas aparece aqui.
-            </div>
-          ) : (
-            <>
-              <ol
-                className="glass divide-y divide-border overflow-hidden rounded-2xl"
-                aria-label="Publicações"
+              <Button
+                onClick={() => setComposerOpen(true)}
+                className="gradient-primary h-9 rounded-full px-5 font-bold text-primary-foreground"
               >
-                {(posts ?? []).map((post) => (
-                  <PostCard
-                    key={post.id}
-                    post={post}
-                    now={now}
-                    onChanged={changed}
-                    onDeleted={deleted}
-                  />
-                ))}
-              </ol>
-              {hasMore && (posts?.length ?? 0) > 0 && (
-                <div className="mt-4 flex justify-center">
-                  <Button variant="outline" disabled={loadingMore} onClick={() => void loadMore()}>
-                    {loadingMore ? "Carregando..." : "Carregar mais"}
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
+                Publicar
+              </Button>
+            </div>
+          </div>
         </div>
-
-        <aside className="hidden space-y-4 lg:block">
-          <section className="glass sticky top-[4.25rem] rounded-2xl p-4">
-            <h2 className="mb-3 text-sm font-semibold">Artistas em destaque</h2>
-            {topArtists.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Ainda sem publicações.</p>
-            ) : (
-              <ul className="space-y-3">
-                {topArtists.map((artist) => (
-                  <li key={artist.username}>
-                    <Link
-                      to="/u/$username"
-                      params={{ username: artist.username }}
-                      className="flex items-center gap-3 rounded-xl p-1 hover:bg-white/5"
-                    >
-                      <UserAvatar name={artist.name} size="sm" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{artist.name}</span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          @{artist.username}
-                        </span>
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {artist.count} {artist.count === 1 ? "post" : "posts"}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="mt-4 flex items-start gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
-              <Lock className="mt-0.5 size-3 shrink-0" />
-              Projetos privados e projetos sob NDA não aparecem aqui. Projeto com NDA só entra
-              depois da data de liberação.
-            </p>
-          </section>
-        </aside>
-      </div>
-      {isAuthenticated && (
-        <PostComposer open={composerOpen} onOpenChange={setComposerOpen} onCreated={added} />
+      ) : (
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <p className="text-[15px] text-muted-foreground">Entre para publicar suas artes e WIPs.</p>
+          <Button asChild className="gradient-primary h-9 shrink-0 rounded-full px-5 font-bold text-primary-foreground">
+            <Link to="/login">Entrar</Link>
+          </Button>
+        </div>
       )}
+
+      {incoming.length > 0 && (
+        <button
+          type="button"
+          onClick={showIncoming}
+          className="flex w-full items-center justify-center gap-2 border-b border-border py-3 text-[15px] text-primary hover:bg-white/[0.03]"
+        >
+          <ArrowUp className="size-4" />
+          {incoming.length === 1 ? "Mostrar 1 nova publicação" : `Mostrar ${incoming.length} novas publicações`}
+        </button>
+      )}
+
+      {error && (
+        <div role="alert" className="border-b border-border p-4 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {posts === null && !error ? (
+        <div aria-label="Carregando">
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="flex gap-3 border-b border-border p-4">
+              <div className="size-10 animate-pulse rounded-full bg-white/10" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-1/3 animate-pulse rounded bg-white/10" />
+                <div className="h-64 animate-pulse rounded-2xl bg-white/5" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : posts && posts.length === 0 ? (
+        <div className="mx-auto max-w-sm px-4 py-12 text-center">
+          <p className="text-2xl font-extrabold">Nada por aqui ainda</p>
+          <p className="mt-2 text-[15px] text-muted-foreground">
+            Publique uma imagem ou ligue o WIP automático num projeto: cada imagem enviada nas tarefas aparece aqui.
+          </p>
+        </div>
+      ) : (
+        <>
+          <ol className="divide-y divide-border border-b border-border" aria-label="Publicações">
+            {(posts ?? []).map((post) => (
+              <PostCard key={post.id} post={post} now={now} onChanged={changed} onDeleted={deleted} />
+            ))}
+          </ol>
+          {hasMore && (posts?.length ?? 0) > 0 && (
+            <button
+              type="button"
+              disabled={loadingMore}
+              onClick={() => void loadMore()}
+              className="w-full border-b border-border py-4 text-[15px] text-primary hover:bg-white/[0.03]"
+            >
+              {loadingMore ? "Carregando..." : "Mostrar mais"}
+            </button>
+          )}
+        </>
+      )}
+      {isAuthenticated && <PostComposer open={composerOpen} onOpenChange={setComposerOpen} onCreated={added} />}
     </AppLayout>
   );
 }

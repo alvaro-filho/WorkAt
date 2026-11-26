@@ -60,7 +60,7 @@ function ProjectsPage() {
   };
 
   return (
-    <AppLayout title="Projetos" subtitle="Seus projetos pessoais, cooperativos e corporativos">
+    <AppLayout layout="wide" title="Projetos" subtitle="Seus projetos pessoais, cooperativos e corporativos">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-muted-foreground">
           Cada projeto tem o seu quadro de tarefas. Em cada tarefa ficam a descrição, as referências
