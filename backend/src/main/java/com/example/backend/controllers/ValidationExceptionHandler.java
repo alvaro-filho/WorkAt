@@ -1,5 +1,6 @@
 package com.example.backend.controllers;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatusCode;
@@ -40,6 +41,13 @@ public class ValidationExceptionHandler {
     public ResponseEntity<Map<String, String>> handleUnreadableMessage(HttpMessageNotReadableException exception) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(Map.of("message", "Requisição inválida: verifique os campos e os valores permitidos."));
+    }
+
+    /** Restrição do banco (ex.: valor único repetido): conflito com mensagem clara, não erro 500. */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, String>> handleDataIntegrity(DataIntegrityViolationException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("message", "Já existe um registro com esses dados. Revise e tente de novo."));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

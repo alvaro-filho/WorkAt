@@ -15,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class ProjectServiceTest {
@@ -41,6 +42,44 @@ class ProjectServiceTest {
         project = new Project();
         project.setId(31L);
         project.setCreatedByUser(creator);
+    }
+
+    @Test
+    void rejectsProjectWithBlankName() {
+        Project draft = new Project();
+        draft.setName("   ");
+        draft.setSlug("vazio-abc12");
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> projectService.createProject(draft, creator));
+        assertEquals(400, error.getStatusCode().value());
+        verify(projectRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectsRepeatedSlugWithConflict() {
+        Project draft = new Project();
+        draft.setName("Jogo");
+        draft.setSlug("jogo-abc12");
+        when(projectRepository.findBySlug("jogo-abc12")).thenReturn(Optional.of(new Project()));
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> projectService.createProject(draft, creator));
+        assertEquals(409, error.getStatusCode().value());
+        verify(projectRepository, never()).save(any());
+    }
+
+    @Test
+    void createsProjectWithTrimmedName() {
+        Project draft = new Project();
+        draft.setName("  Jogo Aurora  ");
+        draft.setSlug("jogo-aurora-abc12");
+        when(projectRepository.save(draft)).thenReturn(draft);
+
+        Project created = projectService.createProject(draft, creator);
+
+        assertEquals("Jogo Aurora", created.getName());
+        assertSame(creator, created.getCreatedByUser());
     }
 
     @Test
