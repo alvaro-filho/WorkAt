@@ -25,7 +25,9 @@ public record ProfileResponse(
         /** Publicações que a pessoa republicou (aparecem na aba Posts com "republicou"). */
         List<Repost> reposts,
         /** Itens salvos: só a própria pessoa vê; para os outros vem vazio. */
-        List<PostResponse> saved
+        List<PostResponse> saved,
+        /** "Disponível para trabalho": null quando o selo está desligado (ou a conta é de estúdio). */
+        ArtistDtos.Availability availability
 ) {
     public record Repost(PostResponse post, LocalDateTime repostedAt) {
     }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  BriefcaseBusiness,
   ChevronRight,
   Crop as CropIcon,
   Download,
@@ -15,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { AvailabilitySection } from "@/components/account/AvailabilitySection";
 import { ImageCropDialog, parseCrop, type Crop } from "@/components/account/ImageCropDialog";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
@@ -56,13 +58,19 @@ function Section({
   );
 }
 
-type SectionId = "perfil" | "permissoes" | "espaco" | "senha" | "dados";
+type SectionId = "perfil" | "disponibilidade" | "permissoes" | "espaco" | "senha" | "dados";
 const SECTIONS: { id: SectionId; label: string; hint: string; icon: LucideIcon }[] = [
   {
     id: "perfil",
     label: "Perfil público",
     hint: "Foto, capa, nome, bio, especialidades e links.",
     icon: UserRound,
+  },
+  {
+    id: "disponibilidade",
+    label: "Disponibilidade",
+    hint: 'O selo "Disponível para trabalho" no seu perfil e no Explorar.',
+    icon: BriefcaseBusiness,
   },
   {
     id: "permissoes",
@@ -158,7 +166,9 @@ function AccountPage() {
           className={`w-full shrink-0 border-border md:block md:w-[360px] md:border-r ${section ? "hidden" : "block"}`}
         >
           <ul>
-            {SECTIONS.map((item) => {
+            {SECTIONS.filter(
+              (item) => item.id !== "disponibilidade" || account.role === "ARTIST",
+            ).map((item) => {
               const active = (section ?? "perfil") === item.id;
               return (
                 <li key={item.id}>
@@ -200,6 +210,9 @@ function AccountPage() {
           </div>
           {(section ?? "perfil") === "perfil" && (
             <ProfileSection account={account} onSaved={applyAccount} />
+          )}
+          {section === "disponibilidade" && account.role === "ARTIST" && (
+            <AvailabilitySection account={account} onSaved={applyAccount} />
           )}
           {section === "permissoes" && (
             <PermissionsSection account={account} onSaved={applyAccount} />

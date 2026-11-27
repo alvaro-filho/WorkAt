@@ -1,5 +1,6 @@
 package com.example.backend.controllers;
 
+import com.example.backend.dto.ArtistDtos;
 import com.example.backend.dto.ProfileResponse;
 import com.example.backend.models.User;
 import com.example.backend.services.AccountService;
@@ -41,7 +42,7 @@ public class AccountController {
                                   String avatarUrl, String bio, List<String> specialties, List<String> links,
                                   LocalDateTime createdAt, long storageUsedBytes, long storageQuotaBytes,
                                   String bannerUrl, String avatarCrop, String bannerCrop,
-                                  boolean inviteByUsername) {
+                                  boolean inviteByUsername, ArtistDtos.Availability availability) {
     }
 
     public record ProfileUpdate(String fullName, String bio, List<String> specialties, List<String> links) {
@@ -64,7 +65,8 @@ public class AccountController {
                 user.getRole().name(), user.avatarUrl(), user.getBio(),
                 ProfileResponse.split(user.getSpecialties(), ","), ProfileResponse.split(user.getLinks(), "\n"),
                 user.getCreatedAt(), accounts.usedBytes(user), accounts.quotaBytes(), user.bannerUrl(),
-                user.getAvatarCrop(), user.getBannerCrop(), user.isInviteByUsername());
+                user.getAvatarCrop(), user.getBannerCrop(), user.isInviteByUsername(),
+                ArtistDtos.Availability.of(user));
     }
 
     @GetMapping("/api/v1/me")
@@ -79,6 +81,14 @@ public class AccountController {
     public AccountResponse updatePermissions(@RequestBody PermissionsUpdate request, Authentication authentication) {
         User user = currentUser.require(authentication);
         return response(accounts.updatePermissions(user, request == null ? null : request.inviteByUsername()));
+    }
+
+    /** Disponível para trabalho (só contas de artista). */
+    @PatchMapping("/api/v1/me/availability")
+    public AccountResponse updateAvailability(@RequestBody ArtistDtos.AvailabilityRequest request,
+                                              Authentication authentication) {
+        User user = currentUser.require(authentication);
+        return response(accounts.updateAvailability(user, request));
     }
 
     @PatchMapping("/api/v1/me/profile")

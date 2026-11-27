@@ -14,6 +14,7 @@ import {
 import { ArtImage } from "@/components/art/ArtPieces";
 import { CallConversation } from "@/components/calls/CallConversation";
 import { CallFormDialog } from "@/components/calls/CallFormDialog";
+import { CallSuggestions } from "@/components/calls/CallSuggestions";
 import { InterestDialog } from "@/components/calls/InterestDialog";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
@@ -310,6 +311,7 @@ function CallPage() {
               )}
             </section>
             <InterestsSection call={call} />
+            {open && <CallSuggestions call={call} />}
           </>
         )}
       </article>

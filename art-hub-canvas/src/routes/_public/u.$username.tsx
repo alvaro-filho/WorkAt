@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Bookmark,
+  BriefcaseBusiness,
   CalendarDays,
   Check,
   ExternalLink,
@@ -27,6 +28,7 @@ import {
   type Profile,
   type ProfileProject,
 } from "@/lib/api";
+import { availabilityLine } from "@/lib/call-labels";
 import { projectTypeInfo } from "@/lib/project-labels";
 
 export const Route = createFileRoute("/_public/u/$username")({
@@ -267,6 +269,12 @@ function ProfilePage() {
             <span className="rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
               {isCompany ? "Estúdio" : "Artista"}
             </span>
+            {profile.availability && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
+                <span className="size-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
+                Disponível para trabalho
+              </span>
+            )}
           </div>
           <p className="text-[15px] text-muted-foreground">@{user.username}</p>
         </div>
@@ -291,6 +299,21 @@ function ProfilePage() {
               </li>
             ))}
           </ul>
+        )}
+
+        {profile.availability && (
+          <p className="mt-3 flex flex-wrap items-center gap-x-2 text-[14px] text-emerald-200/90">
+            <BriefcaseBusiness className="size-4 shrink-0" aria-hidden="true" />
+            <span>{availabilityLine(profile.availability)}</span>
+            {profile.availability.note && (
+              <span className="text-muted-foreground">· {profile.availability.note}</span>
+            )}
+          </p>
+        )}
+        {profile.me && !isCompany && !profile.availability && (
+          <Link to="/conta" className="mt-3 inline-block text-[13px] text-primary hover:underline">
+            Está procurando trabalho? Ligue o selo "Disponível para trabalho" na sua conta.
+          </Link>
         )}
 
         <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[15px] text-muted-foreground">

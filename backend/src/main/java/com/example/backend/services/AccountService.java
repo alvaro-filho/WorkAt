@@ -107,6 +107,61 @@ public class AccountService {
         return taskFileService.quotaBytes();
     }
 
+    /**
+     * Disponível para trabalho (só artistas). Ligado: ao menos um formato e, fora do remoto, a cidade.
+     * Desligado: guarda as escolhas para a próxima vez, mas o selo some do perfil e do Explorar.
+     */
+    @Transactional
+    public User updateAvailability(User user, com.example.backend.dto.ArtistDtos.AvailabilityRequest request) {
+        if (user.getRole() != com.example.backend.models.Role.ARTIST) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Só contas de artista mostram disponibilidade.");
+        }
+        if (request == null) {
+            return user;
+        }
+        if (request.formats() != null) {
+            String formats = request.formats().stream().filter(java.util.Objects::nonNull).distinct()
+                    .map(Enum::name).collect(java.util.stream.Collectors.joining(","));
+            user.setAvailableFormats(formats.isEmpty() ? null : formats);
+        }
+        if (request.location() != null) {
+            user.setAvailableLocation(request.location().name());
+        }
+        if (request.city() != null) {
+            String city = request.city().trim();
+            if (city.length() > 80) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A cidade deve ter no máximo 80 caracteres.");
+            }
+            user.setAvailableCity(city.isEmpty() ? null : city);
+        }
+        if (request.note() != null) {
+            String note = request.note().trim();
+            if (note.length() > 120) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A linha de disponibilidade deve ter no máximo 120 caracteres.");
+            }
+            user.setAvailableNote(note.isEmpty() ? null : note);
+        }
+        if ("REMOTO".equals(user.getAvailableLocation())) {
+            user.setAvailableCity(null);
+        }
+        boolean wasAvailable = user.isAvailableForWork();
+        boolean available = request.available() != null ? request.available() : wasAvailable;
+        if (available) {
+            if (user.getAvailableFormats() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Escolha ao menos um formato de trabalho.");
+            }
+            if (user.getAvailableLocation() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Diga se trabalha remoto, presencial ou híbrido.");
+            }
+            if (!"REMOTO".equals(user.getAvailableLocation()) && user.getAvailableCity() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a cidade para presencial ou híbrido.");
+            }
+        }
+        user.setAvailableForWork(available);
+        user.setAvailableUpdatedAt(java.time.LocalDateTime.now());
+        return userRepository.save(user);
+    }
+
     /** Aba Permissões: se outras pessoas podem convidar pelo @usuário (além do e-mail). */
     @Transactional
     public User updatePermissions(User user, Boolean inviteByUsername) {

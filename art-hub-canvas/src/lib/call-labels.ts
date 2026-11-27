@@ -1,4 +1,5 @@
 import type {
+  Availability,
   CallFormat,
   CallLocation,
   CallRole,
@@ -80,4 +81,13 @@ export function closesLabel(closesOn: string) {
 export function sinceLabel(value: string | null) {
   if (!value) return null;
   return new Date(value).toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
+}
+
+/** "Freela, CLT · Remoto" (ou "Presencial · Recife"): o resumo da disponibilidade. */
+export function availabilityLine(availability: Availability) {
+  const formats = availability.formats.map(formatLabel).join(", ");
+  const where = availability.location
+    ? locationLabel({ location: availability.location, city: availability.city })
+    : null;
+  return [formats, where].filter(Boolean).join(" · ");
 }

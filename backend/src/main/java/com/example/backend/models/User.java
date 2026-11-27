@@ -86,6 +86,43 @@ public class User {
     @Column(name = "invite_by_username", nullable = false, columnDefinition = "boolean default true")
     private boolean inviteByUsername = true;
 
+    // ---- Disponível para trabalho (só artistas) ----
+
+    @Column(name = "available_for_work", nullable = false, columnDefinition = "boolean default false")
+    private boolean availableForWork = false;
+
+    /** Formatos aceitos, separados por vírgula (FREELA,PROJETO,CLT,ESTAGIO). */
+    @Column(name = "available_formats", length = 60)
+    private String availableFormats;
+
+    /** REMOTO, PRESENCIAL ou HIBRIDO. */
+    @Column(name = "available_location", length = 12)
+    private String availableLocation;
+
+    @Column(name = "available_city", length = 80)
+    private String availableCity;
+
+    /** Linha livre ("Livre a partir de janeiro"). */
+    @Column(name = "available_note", length = 120)
+    private String availableNote;
+
+    /** Quando o selo foi ligado ou mudou (ordena os disponíveis no Explorar). */
+    @Column(name = "available_updated_at")
+    private LocalDateTime availableUpdatedAt;
+
+    public boolean isAvailableForWork() { return availableForWork; }
+    public void setAvailableForWork(boolean availableForWork) { this.availableForWork = availableForWork; }
+    public String getAvailableFormats() { return availableFormats; }
+    public void setAvailableFormats(String availableFormats) { this.availableFormats = availableFormats; }
+    public String getAvailableLocation() { return availableLocation; }
+    public void setAvailableLocation(String availableLocation) { this.availableLocation = availableLocation; }
+    public String getAvailableCity() { return availableCity; }
+    public void setAvailableCity(String availableCity) { this.availableCity = availableCity; }
+    public String getAvailableNote() { return availableNote; }
+    public void setAvailableNote(String availableNote) { this.availableNote = availableNote; }
+    public LocalDateTime getAvailableUpdatedAt() { return availableUpdatedAt; }
+    public void setAvailableUpdatedAt(LocalDateTime availableUpdatedAt) { this.availableUpdatedAt = availableUpdatedAt; }
+
     public boolean isInviteByUsername() { return inviteByUsername; }
     public void setInviteByUsername(boolean inviteByUsername) { this.inviteByUsername = inviteByUsername; }
 

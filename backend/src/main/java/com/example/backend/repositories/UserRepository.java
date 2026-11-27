@@ -18,6 +18,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByUsernameIgnoreCase(String username);
 
+    /** Diretório de artistas (Explorar › Artistas): contas de artista que não foram excluídas. */
+    List<User> findByRoleAndDeletedFalse(com.example.backend.models.Role role);
+
     /**
      * Método para encontrar um usuário pelo e-mail.
      * JPA irá gerar a implementação do findByEmail.

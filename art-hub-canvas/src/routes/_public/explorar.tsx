@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Layers, Search, X } from "lucide-react";
 
 import { ArtImage } from "@/components/art/ArtPieces";
+import { ArtistsBoard } from "@/components/artists/ArtistsBoard";
 import { CallsBoard } from "@/components/calls/CallsBoard";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/posts/PostCard";
@@ -11,16 +12,18 @@ import { api, type Post, type PublicProjectCard } from "@/lib/api";
 export const Route = createFileRoute("/_public/explorar")({
   head: () => ({ meta: [{ title: "Explorar — WorkAt" }] }),
   // ?q= vem da busca da coluna lateral.
-  validateSearch: (search: Record<string, unknown>): { q?: string; aba?: "chamadas" } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { q?: string; aba?: "chamadas" | "artistas" } => ({
     ...(typeof search["q"] === "string" && search["q"] ? { q: search["q"] } : {}),
-    ...(search["aba"] === "chamadas" ? { aba: "chamadas" as const } : {}),
+    ...(search["aba"] === "chamadas" || search["aba"] === "artistas" ? { aba: search["aba"] } : {}),
   }),
   component: ExplorePage,
 });
 
 const PAGE = 40;
 
-type Tab = "descobrir" | "recentes" | "projetos" | "chamadas";
+type Tab = "descobrir" | "recentes" | "projetos" | "chamadas" | "artistas";
 const TABS: { id: Tab; label: string; hint: string }[] = [
   {
     id: "descobrir",
@@ -30,6 +33,11 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "recentes", label: "Recentes", hint: "Tudo, do mais novo para o mais antigo" },
   { id: "projetos", label: "Projetos", hint: "Projetos abertos ao público, com todas as etapas" },
   { id: "chamadas", label: "Chamadas", hint: "Vagas e jobs abertos por estúdios" },
+  {
+    id: "artistas",
+    label: "Artistas",
+    hint: "Artistas por função, com quem está disponível primeiro",
+  },
 ];
 
 /** Em alta: curtidas e republicações pesam, mas perdem força com o tempo (para o feed não congelar). */
@@ -146,7 +154,8 @@ function ExplorePage() {
   }, [projects, query]);
   const showingProjects = tab === "projetos";
   const showingCalls = tab === "chamadas";
-  const showingArt = !showingProjects && !showingCalls;
+  const showingArtists = tab === "artistas";
+  const showingArt = !showingProjects && !showingCalls && !showingArtists;
 
   return (
     <AppLayout title="Explorar" subtitle="Artes da comunidade" wide>
@@ -160,7 +169,11 @@ function ExplorePage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={
-                showingCalls ? "Buscar Chamadas ou estúdios" : "Buscar artes, artistas ou projetos"
+                showingCalls
+                  ? "Buscar Chamadas ou estúdios"
+                  : showingArtists
+                    ? "Buscar artistas, especialidades ou cidade"
+                    : "Buscar artes, artistas ou projetos"
               }
               className="h-11 w-full rounded-full border border-border bg-white/5 pr-10 pl-11 text-sm outline-none focus:border-primary focus:bg-transparent"
             />
@@ -189,7 +202,7 @@ function ExplorePage() {
               aria-selected={tab === item.id}
               title={item.hint}
               onClick={() => setTab(item.id)}
-              className={`relative flex-1 py-3.5 text-center text-sm transition-colors hover:bg-white/5 ${
+              className={`relative flex-1 px-1 py-3.5 text-center text-[13px] transition-colors sm:text-sm hover:bg-white/5 ${
                 tab === item.id ? "font-bold text-foreground" : "text-muted-foreground"
               }`}
             >
@@ -206,8 +219,9 @@ function ExplorePage() {
       </div>
 
       {showingCalls && <CallsBoard query={query} />}
+      {showingArtists && <ArtistsBoard query={query} />}
 
-      {error && !showingCalls && (
+      {error && !showingCalls && !showingArtists && (
         <div
           role="alert"
           className="m-4 rounded-2xl border border-border p-4 text-sm text-destructive"

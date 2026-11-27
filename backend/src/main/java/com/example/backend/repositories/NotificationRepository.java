@@ -19,6 +19,8 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     boolean existsByUserAndRefKey(User user, String refKey);
 
+    long countByRefKey(String refKey);
+
     Optional<Notification> findByIdAndUser(Long id, User user);
 
     @Modifying

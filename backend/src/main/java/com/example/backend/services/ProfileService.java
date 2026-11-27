@@ -98,6 +98,8 @@ public class ProfileService {
 
         return new ProfileResponse(UserSummary.from(owner), me, owner.getCreatedAt(), portfolio, posts, projects,
                 hiddenPersonal, heatmap, owner.getBio(), ProfileResponse.split(owner.getSpecialties(), ","),
-                ProfileResponse.split(owner.getLinks(), "\n"), owner.bannerUrl(), reposts, saved);
+                ProfileResponse.split(owner.getLinks(), "\n"), owner.bannerUrl(), reposts, saved,
+                owner.getRole() == com.example.backend.models.Role.ARTIST
+                        ? com.example.backend.dto.ArtistDtos.Availability.publicOf(owner) : null);
     }
 }

@@ -322,6 +322,8 @@ export interface Profile {
   reposts: { post: Post; repostedAt: string }[];
   /** Itens salvos (só a própria pessoa recebe). */
   saved: Post[];
+  /** "Disponível para trabalho" (null quando desligado ou conta de estúdio). */
+  availability: Availability | null;
 }
 
 export type ApiTaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "DONE";
@@ -401,6 +403,30 @@ export interface Account {
   bannerCrop: string | null;
   /** Outras pessoas podem convidar pelo @usuário (além do e-mail). */
   inviteByUsername: boolean;
+  /** Disponível para trabalho (as escolhas ficam guardadas mesmo com o selo desligado). */
+  availability: Availability;
+}
+
+/** "Disponível para trabalho": formatos aceitos, onde e uma linha livre. */
+export interface Availability {
+  available: boolean;
+  formats: CallFormat[];
+  location: CallLocation | null;
+  city: string | null;
+  note: string | null;
+  updatedAt: string | null;
+}
+
+/** Artista no Explorar › Artistas e nas sugestões da Chamada. */
+export interface ArtistCard {
+  user: UserSummary;
+  specialties: string[];
+  /** null quando o selo está desligado. */
+  availability: Availability | null;
+  works: Post[];
+  memberSince: string | null;
+  /** Só nas sugestões: o estúdio já chamou a pessoa para ver a Chamada. */
+  nudged: boolean;
 }
 
 /** Texto do backend que não serve para quem usa o site vira uma frase clara, pelo código HTTP. */
@@ -817,6 +843,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ body }),
     }),
+  /** Aba Artistas do Explorar. */
+  exploreArtists: (filters: { role?: CallRole; available?: boolean } = {}) =>
+    request<ArtistCard[]>(
+      `/explore/artists?${new URLSearchParams({
+        ...(filters.role ? { role: filters.role } : {}),
+        ...(filters.available ? { available: "true" } : {}),
+      }).toString()}`,
+      {},
+      { authFailure: "ignore" },
+    ),
+  callSuggestions: (id: number) => request<ArtistCard[]>(`/calls/${id}/suggestions`),
+  nudgeArtist: (id: number, username: string) =>
+    request<void>(`/calls/${id}/suggestions/${encodeURIComponent(username)}/nudge`, {
+      method: "POST",
+    }),
   /** Aba Projetos do Explorar. */
   exploreProjects: () =>
     request<PublicProjectCard[]>(
@@ -899,6 +940,13 @@ export const api = {
   /** Aba Permissões: aceitar convites pelo @usuário ou só pelo e-mail. */
   updatePermissions: (payload: { inviteByUsername: boolean }) =>
     request<Account>("/me/permissions", { method: "PATCH", body: JSON.stringify(payload) }),
+  updateAvailability: (payload: {
+    available?: boolean;
+    formats?: CallFormat[];
+    location?: CallLocation;
+    city?: string;
+    note?: string;
+  }) => request<Account>("/me/availability", { method: "PATCH", body: JSON.stringify(payload) }),
   changePassword: (currentPassword: string, newPassword: string) =>
     request<{ message: string }>("/me/password", {
       method: "POST",
