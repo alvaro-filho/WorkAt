@@ -64,6 +64,8 @@ public class SecurityConfig {
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/users/*/avatar",
                             "/api/v1/users/*/banner", "/api/v1/posts/*").permitAll()
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/explore/**").permitAll()
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/posts/*/comments",
+                            "/api/v1/projects/*/public/comments").permitAll()
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/users/*/profile",
                             "/api/v1/projects/*/public").permitAll()
                     // Página de erro do Spring: sem isto, todo erro 500 vira 403 e o frontend desloga o usuário.

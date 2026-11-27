@@ -30,9 +30,12 @@ public record PostResponse(
         /** Reações de quem está vendo (falso para visitante sem login). */
         boolean liked,
         boolean reposted,
-        boolean saved
+        boolean saved,
+        long commentCount,
+        boolean commentsEnabled
 ) {
-    public record ProjectRef(Long id, String name, ProjectType type) {
+    /** coverUrl: só no aviso de projeto aberto (PROJECT_PUBLISHED), a capa do projeto. */
+    public record ProjectRef(Long id, String name, ProjectType type, String coverUrl) {
     }
 
     public record TaskRef(Long id, String title, TaskStatus status) {

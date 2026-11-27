@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { Bookmark, Heart, Repeat2 } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { Bookmark, Heart, MessageCircle, Repeat2 } from "lucide-react";
 
 import { api, type Post, type ReactionType } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
@@ -92,6 +92,38 @@ export function PostActions({
   return (
     <div className={size === "lg" ? "space-y-1" : ""}>
       <div className={`flex items-center ${lg ? "gap-2" : "-mx-2"}`}>
+        {!lg && post.kind === "PROJECT_PUBLISHED" && post.project && (
+          <Link
+            to="/projetos/$projectId/publico"
+            params={{ projectId: String(post.project.id) }}
+            hash="comentarios"
+            aria-label="Comentários do projeto"
+            title="Comentários do projeto"
+            className={`${button} ${counter} text-muted-foreground hover:text-primary`}
+          >
+            <span className="rounded-full p-2 group-hover:bg-primary/10">
+              <MessageCircle className={icon} />
+            </span>
+            <span />
+          </Link>
+        )}
+        {!lg &&
+          post.kind !== "PROJECT_PUBLISHED" &&
+          (state.commentsEnabled || state.commentCount > 0) && (
+            <Link
+              to="/publicacao/$postId"
+              params={{ postId: String(post.id) }}
+              hash="comentarios"
+              aria-label={state.commentCount > 0 ? `${state.commentCount} comentários` : "Comentar"}
+              title={state.commentsEnabled ? "Comentar" : "Comentários"}
+              className={`${button} ${counter} text-muted-foreground hover:text-primary`}
+            >
+              <span className="rounded-full p-2 group-hover:bg-primary/10">
+                <MessageCircle className={icon} />
+              </span>
+              <span>{state.commentCount > 0 ? compact(state.commentCount) : ""}</span>
+            </Link>
+          )}
         <button
           type="button"
           onClick={() => void toggle("like")}

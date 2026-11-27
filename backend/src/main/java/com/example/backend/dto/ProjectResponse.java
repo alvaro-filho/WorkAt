@@ -25,7 +25,9 @@ public record ProjectResponse(
         boolean autoWip,
         java.time.LocalDate ndaReleaseDate,
         boolean ndaActive,
-        boolean publiclyVisible
+        boolean publiclyVisible,
+        /** Comentários na página pública (com o padrão do tipo aplicado). */
+        boolean commentsEnabled
 ) {
     public static ProjectResponse from(Project project, User viewer) {
         ProjectRole role = ProjectAccessService.isOwner(project, viewer) ? ProjectRole.OWNER : ProjectRole.MEMBER;
@@ -43,7 +45,8 @@ public record ProjectResponse(
                 project.isAutoWip(),
                 project.getNdaReleaseDate(),
                 com.example.backend.services.PostService.ndaBlocks(project),
-                com.example.backend.services.PostService.isProjectPublic(project)
+                com.example.backend.services.PostService.isProjectPublic(project),
+                com.example.backend.services.PostCommentService.projectCommentsOn(project)
         );
     }
 }

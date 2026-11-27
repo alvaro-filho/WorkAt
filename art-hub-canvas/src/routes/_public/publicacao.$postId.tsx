@@ -5,6 +5,7 @@ import { CalendarDays, Check, FolderKanban, Globe, Link2, Lock, Trash2 } from "l
 import { ArtImage } from "@/components/art/ArtPieces";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
+import { CommentsPanel } from "@/components/posts/CommentsPanel";
 import { Lightbox } from "@/components/posts/Lightbox";
 import { PostActions } from "@/components/posts/PostActions";
 import { relativeTime, UserAvatar } from "@/components/posts/PostCard";
@@ -52,6 +53,14 @@ function PostPage() {
       .post(Number(postId))
       .then((loaded) => {
         if (!active) return;
+        if (loaded.kind === "PROJECT_PUBLISHED" && loaded.project) {
+          void navigate({
+            to: "/projetos/$projectId/publico",
+            params: { projectId: String(loaded.project.id) },
+            replace: true,
+          });
+          return;
+        }
         setPost(loaded);
         // "Mais de": outras publicações da mesma pessoa que o visitante pode ver.
         api
@@ -74,7 +83,7 @@ function PostPage() {
     return () => {
       active = false;
     };
-  }, [postId]);
+  }, [postId, navigate]);
 
   const share = async () => {
     try {
@@ -260,6 +269,18 @@ function PostPage() {
                 </Button>
               )}
             </div>
+
+            <CommentsPanel
+              target="post"
+              id={post.id}
+              onCountChange={(count) =>
+                setPost((current) =>
+                  current && current.commentCount !== count
+                    ? { ...current, commentCount: count }
+                    : current,
+                )
+              }
+            />
 
             {more.length > 0 && (
               <section aria-labelledby="more-title" className="border-t border-border pt-5">

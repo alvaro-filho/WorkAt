@@ -13,6 +13,7 @@ import {
 
 import { ArtImage } from "@/components/art/ArtPieces";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { CommentsPanel } from "@/components/posts/CommentsPanel";
 import { Lightbox } from "@/components/posts/Lightbox";
 import { UserAvatar } from "@/components/posts/PostCard";
 import { Badge } from "@/components/ui/badge";
@@ -322,6 +323,7 @@ function PublicProjectPage() {
                 {error}
               </p>
             )}
+            {project.isPublic && <CommentsPanel target="project" id={project.id} />}
           </div>
         </aside>
       </div>

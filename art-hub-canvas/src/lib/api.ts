@@ -48,6 +48,8 @@ export interface Project {
   ndaActive: boolean;
   /** O público vê o projeto agora (WIP automático ligado e sem NDA ativo). */
   publiclyVisible: boolean;
+  /** Comentários na página pública (desligados por padrão no corporativo). */
+  commentsEnabled: boolean;
 }
 
 export interface TaskFile {
@@ -92,7 +94,8 @@ export interface Post {
   title: string | null;
   subtitle: string | null;
   author: UserSummary;
-  project: { id: number; name: string; type: ProjectType } | null;
+  /** coverUrl: só no aviso de projeto aberto ao público, a capa do projeto. */
+  project: { id: number; name: string; type: ProjectType; coverUrl?: string | null } | null;
   task: { id: number; title: string; status: ApiTaskStatus } | null;
   images: { id: number; url: string }[];
   hiddenFromPortfolio: boolean;
@@ -105,6 +108,28 @@ export interface Post {
   liked: boolean;
   reposted: boolean;
   saved: boolean;
+  /** Comentários visíveis e se a publicação aceita novos. */
+  commentCount: number;
+  commentsEnabled: boolean;
+}
+
+/** Comentário de feedback (removido = apagado com respostas: sem autor nem texto). */
+export interface FeedbackComment {
+  id: number;
+  author: UserSummary | null;
+  body: string | null;
+  removed: boolean;
+  createdAt: string;
+  canDelete: boolean;
+  replies: FeedbackComment[];
+}
+
+export interface CommentThread {
+  enabled: boolean;
+  /** Quem está vendo pode ligar/desligar (autor da publicação ou diretor do projeto). */
+  canToggle: boolean;
+  count: number;
+  comments: FeedbackComment[];
 }
 
 export type ReactionType = "like" | "repost" | "save";
@@ -631,6 +656,28 @@ export const api = {
   /** Curtir, republicar ou salvar (on = true liga, false desliga). Devolve a publicação atualizada. */
   react: (postId: number, type: ReactionType, on: boolean) =>
     request<Post>(`/posts/${postId}/reactions/${type}`, { method: on ? "PUT" : "DELETE" }),
+  /** Comentários de feedback: target "post" (publicação) ou "project" (página pública do projeto). */
+  commentThread: (target: "post" | "project", id: number) =>
+    request<CommentThread>(
+      target === "post" ? `/posts/${id}/comments` : `/projects/${id}/public/comments`,
+      {},
+      { authFailure: "ignore" },
+    ),
+  addFeedback: (target: "post" | "project", id: number, body: string, parentId?: number | null) =>
+    request<CommentThread>(
+      target === "post" ? `/posts/${id}/comments` : `/projects/${id}/public/comments`,
+      {
+        method: "POST",
+        body: JSON.stringify({ body, parentId: parentId ?? null }),
+      },
+    ),
+  setFeedbackEnabled: (target: "post" | "project", id: number, enabled: boolean) =>
+    request<CommentThread>(
+      target === "post" ? `/posts/${id}/comments/settings` : `/projects/${id}/comments/settings`,
+      { method: "PUT", body: JSON.stringify({ enabled }) },
+    ),
+  deleteFeedback: (commentId: number) =>
+    request<void>(`/post-comments/${commentId}`, { method: "DELETE" }),
   /** Aba Projetos do Explorar. */
   exploreProjects: () =>
     request<PublicProjectCard[]>(

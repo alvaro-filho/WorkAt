@@ -309,14 +309,31 @@ export function PostCard({
           {post.subtitle && (
             <p className="mt-1 text-[15px] leading-5 whitespace-pre-wrap">{post.subtitle}</p>
           )}
-          <Link
-            to="/publicacao/$postId"
-            params={{ postId: String(post.id) }}
-            aria-label={`Abrir ${post.title ?? "publicação"}`}
-            className="block"
-          >
-            <PostImages post={post} />
-          </Link>
+          {post.kind === "PROJECT_PUBLISHED" && post.project ? (
+            post.project.coverUrl && (
+              <Link
+                to="/projetos/$projectId/publico"
+                params={{ projectId: String(post.project.id) }}
+                aria-label={`Abrir o projeto ${post.project.name}`}
+                className="mt-3 block overflow-hidden rounded-2xl border border-border"
+              >
+                <ArtImage
+                  src={post.project.coverUrl}
+                  title={post.project.name}
+                  className="max-h-[420px] w-full object-cover"
+                />
+              </Link>
+            )
+          ) : (
+            <Link
+              to="/publicacao/$postId"
+              params={{ postId: String(post.id) }}
+              aria-label={`Abrir ${post.title ?? "publicação"}`}
+              className="block"
+            >
+              <PostImages post={post} />
+            </Link>
+          )}
           {(linksToProject || !post.isPublic || (mine && post.hiddenFromPortfolio)) && (
             <footer className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               {linksToProject && (

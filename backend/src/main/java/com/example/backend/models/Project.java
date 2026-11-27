@@ -52,6 +52,18 @@ public class Project {
     @Column(name = "cover_file_id")
     private Long coverFileId;
 
+    /** Comentários na página pública: null = padrão do tipo (desligado no corporativo); true/false = escolha do diretor. */
+    @Column(name = "comments_enabled")
+    private Boolean commentsEnabled;
+
+    public Boolean getCommentsEnabled() {
+        return commentsEnabled;
+    }
+
+    public void setCommentsEnabled(Boolean commentsEnabled) {
+        this.commentsEnabled = commentsEnabled;
+    }
+
     // Relacionamento opcional com o Criador do Projeto (usuário)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id", nullable = false)

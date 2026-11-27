@@ -49,6 +49,13 @@ public class Post {
     @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean hiddenFromPortfolio = false;
 
+    /** Comentários: null = segue o projeto (avulsa sem projeto: ligado); true/false = escolha do autor. */
+    @Column(name = "comments_enabled")
+    private Boolean commentsEnabled;
+
+    public Boolean getCommentsEnabled() { return commentsEnabled; }
+    public void setCommentsEnabled(Boolean commentsEnabled) { this.commentsEnabled = commentsEnabled; }
+
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC, id ASC")
     @BatchSize(size = 50)

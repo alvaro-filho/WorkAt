@@ -65,6 +65,12 @@ public class PostService {
     private final FileStorage storage;
 
     private PostReactionRepository reactionRepository;
+    private com.example.backend.repositories.PostCommentRepository commentRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setCommentRepository(com.example.backend.repositories.PostCommentRepository commentRepository) {
+        this.commentRepository = commentRepository;
+    }
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     public void setReactionRepository(PostReactionRepository reactionRepository) {
@@ -123,7 +129,11 @@ public class PostService {
         int size = limit == null || limit < 1 ? 20 : Math.min(limit, MAX_FEED_PAGE);
         long cursor = before == null ? Long.MAX_VALUE : before;
         List<Post> page = postRepository.findPublicFeed(cursor, BusinessTime.today(), PageRequest.of(0, size)).stream()
-                .filter(post -> !post.getImages().isEmpty() || post.getKind() == PostKind.PROJECT_PUBLISHED)
+                // Aviso de projeto aberto só entra quando o projeto já tem imagem pública: o feed é de artes,
+                // não de texto solto.
+                .filter(post -> post.getKind() == PostKind.PROJECT_PUBLISHED
+                        ? post.getProject() != null && coverOf(post.getProject()).isPresent()
+                        : !post.getImages().isEmpty())
                 .toList();
         return toResponses(page, viewer);
     }
@@ -487,6 +497,12 @@ public class PostService {
         List<Long> ids = posts.stream().map(Post::getId).filter(java.util.Objects::nonNull).toList();
         Map<Long, long[]> counts = new java.util.HashMap<>();
         Map<Long, Set<PostReaction.Type>> mine = new java.util.HashMap<>();
+        Map<Long, Long> comments = new java.util.HashMap<>();
+        if (commentRepository != null && !ids.isEmpty()) {
+            for (Object[] row : commentRepository.countByPosts(ids)) {
+                comments.put((Long) row[0], (Long) row[1]);
+            }
+        }
         if (reactionRepository != null && !ids.isEmpty()) {
             for (Object[] row : reactionRepository.countByPosts(ids)) {
                 long[] value = counts.computeIfAbsent((Long) row[0], key -> new long[3]);
@@ -500,10 +516,11 @@ public class PostService {
         }
         return posts.stream().map(post -> build(post,
                 counts.getOrDefault(post.getId(), new long[3]),
-                mine.getOrDefault(post.getId(), Set.of()))).toList();
+                mine.getOrDefault(post.getId(), Set.of()),
+                comments.getOrDefault(post.getId(), 0L))).toList();
     }
 
-    private PostResponse build(Post post, long[] counts, Set<PostReaction.Type> mine) {
+    private PostResponse build(Post post, long[] counts, Set<PostReaction.Type> mine, long commentCount) {
         Task task = post.getTask();
         Project project = post.getProject();
         String title = post.getTitle() != null ? post.getTitle()
@@ -520,7 +537,8 @@ public class PostService {
                 subtitle,
                 UserSummary.from(post.getAuthor()),
                 project == null ? null
-                        : new PostResponse.ProjectRef(project.getId(), project.getName(), project.getType()),
+                        : new PostResponse.ProjectRef(project.getId(), project.getName(), project.getType(),
+                                post.getKind() == PostKind.PROJECT_PUBLISHED ? coverOf(project).orElse(null) : null),
                 task == null ? null : new PostResponse.TaskRef(task.getId(), task.getTitle(), task.getStatus()),
                 post.getImages().stream()
                         .map(image -> new PostResponse.ImageRef(image.getId(), imageUrl(post, image)))
@@ -532,7 +550,9 @@ public class PostService {
                 counts[PostReaction.Type.REPOST.ordinal()],
                 mine.contains(PostReaction.Type.LIKE),
                 mine.contains(PostReaction.Type.REPOST),
-                mine.contains(PostReaction.Type.SAVE));
+                mine.contains(PostReaction.Type.SAVE),
+                commentCount,
+                PostCommentService.postCommentsOn(post));
     }
 
     static String labelOf(Post post) {

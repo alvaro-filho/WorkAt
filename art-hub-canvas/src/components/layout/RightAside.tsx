@@ -30,7 +30,10 @@ export function AsideCard({
       <h2 className="px-4 pt-3 pb-1 text-xl font-extrabold">{title}</h2>
       <div>{children}</div>
       {more && (
-        <Link to={more.to} className="block px-4 py-4 text-[15px] text-primary hover:bg-white/[0.03]">
+        <Link
+          to={more.to}
+          className="block px-4 py-4 text-[15px] text-primary hover:bg-white/[0.03]"
+        >
           {more.label}
         </Link>
       )}
@@ -97,7 +100,9 @@ export function DefaultAside({ extra }: { extra?: ReactNode }) {
                   <UserAvatar name={user.fullName} src={user.avatarUrl} size="md" />
                   <span className="min-w-0 flex-1 leading-5">
                     <span className="block truncate text-[15px] font-bold">{user.fullName}</span>
-                    <span className="block truncate text-[15px] text-muted-foreground">@{user.username}</span>
+                    <span className="block truncate text-[15px] text-muted-foreground">
+                      @{user.username}
+                    </span>
                   </span>
                   <span className="shrink-0 rounded-full bg-foreground px-4 py-1.5 text-sm font-bold text-background">
                     Ver perfil
@@ -120,13 +125,17 @@ export function DefaultAside({ extra }: { extra?: ReactNode }) {
                   className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03]"
                 >
                   <ArtImage
-                    src={post.images[0]?.url ?? null}
+                    src={post.project!.coverUrl ?? post.images[0]?.url ?? null}
                     title={post.project!.name}
                     className="size-12 shrink-0 rounded-lg object-cover"
                   />
                   <span className="min-w-0 leading-5">
-                    <span className="block text-[13px] text-muted-foreground">por {post.author.fullName}</span>
-                    <span className="block truncate text-[15px] font-bold">{post.project!.name}</span>
+                    <span className="block text-[13px] text-muted-foreground">
+                      por {post.author.fullName}
+                    </span>
+                    <span className="block truncate text-[15px] font-bold">
+                      {post.project!.name}
+                    </span>
                   </span>
                 </Link>
               </li>
