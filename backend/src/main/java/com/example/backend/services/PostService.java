@@ -129,11 +129,9 @@ public class PostService {
         int size = limit == null || limit < 1 ? 20 : Math.min(limit, MAX_FEED_PAGE);
         long cursor = before == null ? Long.MAX_VALUE : before;
         List<Post> page = postRepository.findPublicFeed(cursor, BusinessTime.today(), PageRequest.of(0, size)).stream()
-                // Aviso de projeto aberto só entra quando o projeto já tem imagem pública: o feed é de artes,
-                // não de texto solto.
-                .filter(post -> post.getKind() == PostKind.PROJECT_PUBLISHED
-                        ? post.getProject() != null && coverOf(post.getProject()).isPresent()
-                        : !post.getImages().isEmpty())
+                // Toda publicação do feed tem imagem: o aviso de projeto aberto mostra as imagens que o projeto
+                // tinha quando foi aberto; aberto sem imagem, fica fora (o primeiro WIP já apresenta o projeto).
+                .filter(post -> !post.getImages().isEmpty())
                 .toList();
         return toResponses(page, viewer);
     }

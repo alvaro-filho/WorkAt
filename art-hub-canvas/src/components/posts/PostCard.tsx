@@ -310,20 +310,16 @@ export function PostCard({
             <p className="mt-1 text-[15px] leading-5 whitespace-pre-wrap">{post.subtitle}</p>
           )}
           {post.kind === "PROJECT_PUBLISHED" && post.project ? (
-            post.project.coverUrl && (
-              <Link
-                to="/projetos/$projectId/publico"
-                params={{ projectId: String(post.project.id) }}
-                aria-label={`Abrir o projeto ${post.project.name}`}
-                className="mt-3 block overflow-hidden rounded-2xl border border-border"
-              >
-                <ArtImage
-                  src={post.project.coverUrl}
-                  title={post.project.name}
-                  className="max-h-[420px] w-full object-cover"
-                />
-              </Link>
-            )
+            // As imagens guardadas no aviso (as do momento em que o projeto foi aberto), não a capa:
+            // a capa é a imagem mais nova e repetiria o WIP publicado logo depois.
+            <Link
+              to="/projetos/$projectId/publico"
+              params={{ projectId: String(post.project.id) }}
+              aria-label={`Abrir o projeto ${post.project.name}`}
+              className="block"
+            >
+              <PostImages post={post} />
+            </Link>
           ) : (
             <Link
               to="/publicacao/$postId"
