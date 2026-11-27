@@ -26,6 +26,7 @@ import { Route as PublicExplorarRouteImport } from './routes/_public/explorar'
 import { Route as PublicPublicacoesRouteImport } from './routes/_public/publicacoes'
 import { Route as AuthenticatedProjetosIndexRouteImport } from './routes/_authenticated/projetos.index'
 import { Route as AuthenticatedProjetosProjectIdRouteImport } from './routes/_authenticated/projetos.$projectId'
+import { Route as PublicChamadasCallIdRouteImport } from './routes/_public/chamadas.$callId'
 import { Route as PublicPublicacaoPostIdRouteImport } from './routes/_public/publicacao.$postId'
 import { Route as PublicUUsernameRouteImport } from './routes/_public/u.$username'
 import { Route as PublicProjetosProjectIdPublicoRouteImport } from './routes/_public/projetos.$projectId_.publico'
@@ -118,6 +119,11 @@ const AuthenticatedProjetosProjectIdRoute =
     path: '/projetos/$projectId',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const PublicChamadasCallIdRoute = PublicChamadasCallIdRouteImport.update({
+  id: '/chamadas/$callId',
+  path: '/chamadas/$callId',
+  getParentRoute: () => PublicRoute,
+} as any)
 const PublicPublicacaoPostIdRoute = PublicPublicacaoPostIdRouteImport.update({
   id: '/publicacao/$postId',
   path: '/publicacao/$postId',
@@ -156,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/explorar': typeof PublicExplorarRoute
   '/publicacoes': typeof PublicPublicacoesRoute
   '/projetos/$projectId': typeof AuthenticatedProjetosProjectIdRoute
+  '/chamadas/$callId': typeof PublicChamadasCallIdRoute
   '/publicacao/$postId': typeof PublicPublicacaoPostIdRoute
   '/u/$username': typeof PublicUUsernameRoute
   '/projetos/': typeof AuthenticatedProjetosIndexRoute
@@ -177,6 +184,7 @@ export interface FileRoutesByTo {
   '/explorar': typeof PublicExplorarRoute
   '/publicacoes': typeof PublicPublicacoesRoute
   '/projetos/$projectId': typeof AuthenticatedProjetosProjectIdRoute
+  '/chamadas/$callId': typeof PublicChamadasCallIdRoute
   '/publicacao/$postId': typeof PublicPublicacaoPostIdRoute
   '/u/$username': typeof PublicUUsernameRoute
   '/projetos': typeof AuthenticatedProjetosIndexRoute
@@ -201,6 +209,7 @@ export interface FileRoutesById {
   '/_public/explorar': typeof PublicExplorarRoute
   '/_public/publicacoes': typeof PublicPublicacoesRoute
   '/_authenticated/projetos/$projectId': typeof AuthenticatedProjetosProjectIdRoute
+  '/_public/chamadas/$callId': typeof PublicChamadasCallIdRoute
   '/_public/publicacao/$postId': typeof PublicPublicacaoPostIdRoute
   '/_public/u/$username': typeof PublicUUsernameRoute
   '/_authenticated/projetos/': typeof AuthenticatedProjetosIndexRoute
@@ -224,6 +233,7 @@ export interface FileRouteTypes {
     | '/explorar'
     | '/publicacoes'
     | '/projetos/$projectId'
+    | '/chamadas/$callId'
     | '/publicacao/$postId'
     | '/u/$username'
     | '/projetos/'
@@ -245,6 +255,7 @@ export interface FileRouteTypes {
     | '/explorar'
     | '/publicacoes'
     | '/projetos/$projectId'
+    | '/chamadas/$callId'
     | '/publicacao/$postId'
     | '/u/$username'
     | '/projetos'
@@ -268,6 +279,7 @@ export interface FileRouteTypes {
     | '/_public/explorar'
     | '/_public/publicacoes'
     | '/_authenticated/projetos/$projectId'
+    | '/_public/chamadas/$callId'
     | '/_public/publicacao/$postId'
     | '/_public/u/$username'
     | '/_authenticated/projetos/'
@@ -405,6 +417,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjetosProjectIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_public/chamadas/$callId': {
+      id: '/_public/chamadas/$callId'
+      path: '/chamadas/$callId'
+      fullPath: '/chamadas/$callId'
+      preLoaderRoute: typeof PublicChamadasCallIdRouteImport
+      parentRoute: typeof PublicRoute
+    }
     '/_public/publicacao/$postId': {
       id: '/_public/publicacao/$postId'
       path: '/publicacao/$postId'
@@ -470,6 +489,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 interface PublicRouteChildren {
   PublicExplorarRoute: typeof PublicExplorarRoute
   PublicPublicacoesRoute: typeof PublicPublicacoesRoute
+  PublicChamadasCallIdRoute: typeof PublicChamadasCallIdRoute
   PublicPublicacaoPostIdRoute: typeof PublicPublicacaoPostIdRoute
   PublicUUsernameRoute: typeof PublicUUsernameRoute
   PublicProjetosProjectIdPublicoRoute: typeof PublicProjetosProjectIdPublicoRoute
@@ -478,6 +498,7 @@ interface PublicRouteChildren {
 const PublicRouteChildren: PublicRouteChildren = {
   PublicExplorarRoute: PublicExplorarRoute,
   PublicPublicacoesRoute: PublicPublicacoesRoute,
+  PublicChamadasCallIdRoute: PublicChamadasCallIdRoute,
   PublicPublicacaoPostIdRoute: PublicPublicacaoPostIdRoute,
   PublicUUsernameRoute: PublicUUsernameRoute,
   PublicProjetosProjectIdPublicoRoute: PublicProjetosProjectIdPublicoRoute,

@@ -12,13 +12,21 @@ import {
 } from "lucide-react";
 
 import { ArtImage } from "@/components/art/ArtPieces";
+import { CallCard } from "@/components/calls/CallCard";
 import { ActivityHeatmap } from "@/components/dashboard/ActivityHeatmap";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { DefaultAside } from "@/components/layout/RightAside";
 import { PostCard } from "@/components/posts/PostCard";
 import { PostComposer } from "@/components/posts/PostComposer";
 import { Button } from "@/components/ui/button";
-import { api, ApiError, type Post, type Profile, type ProfileProject } from "@/lib/api";
+import {
+  api,
+  ApiError,
+  type JobCall,
+  type Post,
+  type Profile,
+  type ProfileProject,
+} from "@/lib/api";
 import { projectTypeInfo } from "@/lib/project-labels";
 
 export const Route = createFileRoute("/_public/u/$username")({
@@ -26,7 +34,7 @@ export const Route = createFileRoute("/_public/u/$username")({
   component: ProfilePage,
 });
 
-type Tab = "portfolio" | "projects" | "posts" | "saved";
+type Tab = "portfolio" | "projects" | "calls" | "posts" | "saved";
 
 type PortfolioItem =
   | { kind: "post"; post: Post; date: string }
@@ -192,6 +200,7 @@ function ProfilePage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: "portfolio", label: "Portfólio" },
     { id: "projects", label: "Projetos" },
+    ...(isCompany ? [{ id: "calls" as const, label: "Chamadas" }] : []),
     { id: "posts", label: "Posts" },
     ...(profile.me ? [{ id: "saved" as const, label: "Salvos" }] : []),
   ];
@@ -435,6 +444,10 @@ function ProfilePage() {
           </ol>
         ))}
 
+      {tab === "calls" && isCompany && (
+        <CompanyCalls username={profile.user.username} me={profile.me} />
+      )}
+
       {tab === "saved" &&
         profile.me &&
         (profile.saved.length === 0 ? (
@@ -458,6 +471,44 @@ function ProfilePage() {
         <PostComposer open={composerOpen} onOpenChange={setComposerOpen} onCreated={addPost} />
       )}
     </AppLayout>
+  );
+}
+
+/** Aba Chamadas do perfil de estúdio: abertas primeiro; fechadas e preenchidas ficam como histórico. */
+function CompanyCalls({ username, me }: { username: string; me: boolean }) {
+  const [calls, setCalls] = useState<JobCall[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    api
+      .calls({ author: username })
+      .then((list) => active && setCalls(list))
+      .catch(() => active && setCalls([]));
+    return () => {
+      active = false;
+    };
+  }, [username]);
+  if (calls === null) return <div className="m-4 h-28 animate-pulse rounded-2xl bg-white/5" />;
+  if (calls.length === 0) {
+    return (
+      <EmptyTab
+        title="Nenhuma Chamada"
+        text={
+          me
+            ? "Publique uma Chamada na aba Chamadas do Explorar."
+            : "Este estúdio ainda não abriu Chamadas."
+        }
+      />
+    );
+  }
+  const sorted = [...calls].sort(
+    (a, b) => Number(b.status === "OPEN") - Number(a.status === "OPEN"),
+  );
+  return (
+    <ul className="divide-y divide-border border-b border-border">
+      {sorted.map((call) => (
+        <CallCard key={call.id} call={call} />
+      ))}
+    </ul>
   );
 }
 

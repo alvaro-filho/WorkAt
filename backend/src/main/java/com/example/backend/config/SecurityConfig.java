@@ -64,6 +64,7 @@ public class SecurityConfig {
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/users/*/avatar",
                             "/api/v1/users/*/banner", "/api/v1/posts/*").permitAll()
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/explore/**").permitAll()
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/calls", "/api/v1/calls/*").permitAll()
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/posts/*/comments",
                             "/api/v1/projects/*/public/comments").permitAll()
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/users/*/profile",

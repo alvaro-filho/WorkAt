@@ -134,6 +134,75 @@ export interface CommentThread {
 
 export type ReactionType = "like" | "repost" | "save";
 
+// ---- Chamadas (vagas e jobs) ----
+export type CallRole =
+  "CONCEPT" | "ILUSTRACAO" | "MODELAGEM_3D" | "ANIMACAO" | "HQ" | "UI" | "OUTRO";
+export type CallFormat = "FREELA" | "PROJETO" | "CLT" | "ESTAGIO";
+export type CallLocation = "REMOTO" | "PRESENCIAL" | "HIBRIDO";
+export type CallStatus = "OPEN" | "CLOSED" | "FILLED";
+export type InterestStatus = "SENT" | "SEEN" | "INVITED" | "NOT_SELECTED";
+
+export interface JobCall {
+  id: number;
+  title: string;
+  role: CallRole;
+  description: string;
+  format: CallFormat;
+  location: CallLocation;
+  city: string | null;
+  /** Faixa em reais, opcional (o estúdio decide se mostra). */
+  payMin: number | null;
+  payMax: number | null;
+  closesOn: string;
+  nda: boolean;
+  status: CallStatus;
+  createdAt: string;
+  author: UserSummary;
+  /** Sinais de confiança: há quanto tempo o estúdio está aqui e quantos projetos corporativos dirige. */
+  authorSince: string | null;
+  directedProjects: number;
+  /** Quem está vendo é o autor. */
+  mine: boolean;
+  /** Só para o autor. */
+  interestCount: number | null;
+  myInterest: { id: number; status: InterestStatus; projectId: number | null } | null;
+}
+
+export interface CallInterest {
+  id: number;
+  artist: UserSummary;
+  message: string;
+  status: InterestStatus;
+  createdAt: string;
+  works: Post[];
+  projectId: number | null;
+}
+
+export interface MyInterestItem {
+  id: number;
+  status: InterestStatus;
+  createdAt: string;
+  projectId: number | null;
+  callId: number;
+  callTitle: string;
+  company: UserSummary;
+  callStatus: CallStatus;
+}
+
+export interface CallInput {
+  title?: string;
+  role?: CallRole;
+  description?: string;
+  format?: CallFormat;
+  location?: CallLocation;
+  city?: string | null;
+  payMin?: number | null;
+  payMax?: number | null;
+  closesOn?: string;
+  nda?: boolean;
+  status?: CallStatus;
+}
+
 /** Projeto na tela Projetos, com o resumo do que está acontecendo (só tarefas que a pessoa vê). */
 export interface ProjectOverview {
   project: Project;
@@ -678,6 +747,45 @@ export const api = {
     ),
   deleteFeedback: (commentId: number) =>
     request<void>(`/post-comments/${commentId}`, { method: "DELETE" }),
+  // ---- Chamadas ----
+  calls: (
+    filters: {
+      role?: CallRole;
+      format?: CallFormat;
+      location?: CallLocation;
+      author?: string;
+    } = {},
+  ) =>
+    request<JobCall[]>(
+      `/calls?${new URLSearchParams(
+        Object.entries(filters).filter((entry): entry is [string, string] => Boolean(entry[1])),
+      ).toString()}`,
+      {},
+      { authFailure: "ignore" },
+    ),
+  call: (id: number) => request<JobCall>(`/calls/${id}`, {}, { authFailure: "ignore" }),
+  createCall: (input: CallInput) =>
+    request<JobCall>("/calls", { method: "POST", body: JSON.stringify(input) }),
+  updateCall: (id: number, input: CallInput) =>
+    request<JobCall>(`/calls/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  showInterest: (id: number, message: string, postIds: number[]) =>
+    request<JobCall>(`/calls/${id}/interest`, {
+      method: "POST",
+      body: JSON.stringify({ message, postIds }),
+    }),
+  withdrawInterest: (id: number) => request<JobCall>(`/calls/${id}/interest`, { method: "DELETE" }),
+  callInterests: (id: number) => request<CallInterest[]>(`/calls/${id}/interests`),
+  inviteFromCall: (id: number, interestId: number, projectId: number | null) =>
+    request<{ projectId: number; interest: CallInterest }>(
+      `/calls/${id}/interests/${interestId}/invite`,
+      {
+        method: "POST",
+        body: JSON.stringify({ projectId }),
+      },
+    ),
+  declineInterest: (id: number, interestId: number) =>
+    request<CallInterest>(`/calls/${id}/interests/${interestId}/decline`, { method: "POST" }),
+  myInterests: () => request<MyInterestItem[]>("/me/interests"),
   /** Aba Projetos do Explorar. */
   exploreProjects: () =>
     request<PublicProjectCard[]>(

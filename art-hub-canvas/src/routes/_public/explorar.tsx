@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Layers, Search, X } from "lucide-react";
 
 import { ArtImage } from "@/components/art/ArtPieces";
+import { CallsBoard } from "@/components/calls/CallsBoard";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { UserAvatar } from "@/components/posts/PostCard";
 import { api, type Post, type PublicProjectCard } from "@/lib/api";
@@ -10,14 +11,16 @@ import { api, type Post, type PublicProjectCard } from "@/lib/api";
 export const Route = createFileRoute("/_public/explorar")({
   head: () => ({ meta: [{ title: "Explorar — WorkAt" }] }),
   // ?q= vem da busca da coluna lateral.
-  validateSearch: (search: Record<string, unknown>): { q?: string } =>
-    typeof search["q"] === "string" && search["q"] ? { q: search["q"] } : {},
+  validateSearch: (search: Record<string, unknown>): { q?: string; aba?: "chamadas" } => ({
+    ...(typeof search["q"] === "string" && search["q"] ? { q: search["q"] } : {}),
+    ...(search["aba"] === "chamadas" ? { aba: "chamadas" as const } : {}),
+  }),
   component: ExplorePage,
 });
 
 const PAGE = 40;
 
-type Tab = "descobrir" | "recentes" | "projetos";
+type Tab = "descobrir" | "recentes" | "projetos" | "chamadas";
 const TABS: { id: Tab; label: string; hint: string }[] = [
   {
     id: "descobrir",
@@ -26,6 +29,7 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
   },
   { id: "recentes", label: "Recentes", hint: "Tudo, do mais novo para o mais antigo" },
   { id: "projetos", label: "Projetos", hint: "Projetos abertos ao público, com todas as etapas" },
+  { id: "chamadas", label: "Chamadas", hint: "Vagas e jobs abertos por estúdios" },
 ];
 
 /** Em alta: curtidas e republicações pesam, mas perdem força com o tempo (para o feed não congelar). */
@@ -57,11 +61,14 @@ function ExplorePage() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("descobrir");
+  const { q, aba } = Route.useSearch();
+  const [tab, setTab] = useState<Tab>(aba ?? "descobrir");
   const [projects, setProjects] = useState<PublicProjectCard[] | null>(null);
-  const { q } = Route.useSearch();
   const [query, setQuery] = useState(q ?? "");
   useEffect(() => setQuery(q ?? ""), [q]);
+  useEffect(() => {
+    if (aba) setTab(aba);
+  }, [aba]);
   const sentinel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -138,6 +145,8 @@ function ExplorePage() {
     });
   }, [projects, query]);
   const showingProjects = tab === "projetos";
+  const showingCalls = tab === "chamadas";
+  const showingArt = !showingProjects && !showingCalls;
 
   return (
     <AppLayout title="Explorar" subtitle="Artes da comunidade" wide>
@@ -150,7 +159,9 @@ function ExplorePage() {
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar artes, artistas ou projetos"
+              placeholder={
+                showingCalls ? "Buscar Chamadas ou estúdios" : "Buscar artes, artistas ou projetos"
+              }
               className="h-11 w-full rounded-full border border-border bg-white/5 pr-10 pl-11 text-sm outline-none focus:border-primary focus:bg-transparent"
             />
             {query && (
@@ -194,7 +205,9 @@ function ExplorePage() {
         </div>
       </div>
 
-      {error && (
+      {showingCalls && <CallsBoard query={query} />}
+
+      {error && !showingCalls && (
         <div
           role="alert"
           className="m-4 rounded-2xl border border-border p-4 text-sm text-destructive"
@@ -203,7 +216,7 @@ function ExplorePage() {
         </div>
       )}
 
-      {!showingProjects && posts === null && !error && (
+      {showingArt && posts === null && !error && (
         <div
           className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
           aria-label="Carregando"
@@ -246,7 +259,7 @@ function ExplorePage() {
         </ul>
       )}
 
-      {!showingProjects && posts && visible.length === 0 && (
+      {showingArt && posts && visible.length === 0 && (
         <div className="mx-auto max-w-md p-10 text-center">
           <p className="font-semibold">{query ? "Nada encontrado." : "Ainda não há artes aqui."}</p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -257,7 +270,7 @@ function ExplorePage() {
         </div>
       )}
 
-      {!showingProjects && visible.length > 0 && (
+      {showingArt && visible.length > 0 && (
         <ul className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {visible.map((post) => (
             <ArtTile key={post.id} post={post} />
@@ -265,8 +278,8 @@ function ExplorePage() {
         </ul>
       )}
 
-      {!showingProjects && <div ref={sentinel} className="h-10" aria-hidden="true" />}
-      {!showingProjects && loadingMore && (
+      {showingArt && <div ref={sentinel} className="h-10" aria-hidden="true" />}
+      {showingArt && loadingMore && (
         <p className="pb-6 text-center text-sm text-muted-foreground">Carregando mais...</p>
       )}
     </AppLayout>
