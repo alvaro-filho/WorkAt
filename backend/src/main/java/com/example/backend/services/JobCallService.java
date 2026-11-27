@@ -18,11 +18,13 @@ import com.example.backend.models.ProjectType;
 import com.example.backend.models.Role;
 import com.example.backend.models.User;
 import com.example.backend.repositories.JobCallRepository;
+import com.example.backend.repositories.JobInterestMessageRepository;
 import com.example.backend.repositories.JobInterestRepository;
 import com.example.backend.repositories.NotificationRepository;
 import com.example.backend.repositories.PostRepository;
 import com.example.backend.repositories.ProjectRepository;
 import com.example.backend.repositories.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,6 +60,8 @@ public class JobCallService {
     private final ProjectService projectService;
     private final ProjectMembershipService membershipService;
     private final NotificationRepository notificationRepository;
+    /** Opcional (os testes antigos constroem o serviço sem ele): conta as mensagens de cada candidatura. */
+    private JobInterestMessageRepository messageRepository;
 
     public JobCallService(JobCallRepository callRepository, JobInterestRepository interestRepository,
                           PostRepository postRepository, ProjectRepository projectRepository,
@@ -72,6 +76,15 @@ public class JobCallService {
         this.projectService = projectService;
         this.membershipService = membershipService;
         this.notificationRepository = notificationRepository;
+    }
+
+    @Autowired(required = false)
+    public void setMessageRepository(JobInterestMessageRepository messageRepository) {
+        this.messageRepository = messageRepository;
+    }
+
+    private long messageCount(JobInterest interest) {
+        return messageRepository == null || interest.getId() == null ? 0 : messageRepository.countByInterest(interest);
     }
 
     // ---- Leitura ----
@@ -220,7 +233,7 @@ public class JobCallService {
                 .map(interest -> new MyInterestItem(interest.getId(), interest.getStatus(), interest.getCreatedAt(),
                         interest.getProjectId(), interest.getCall().getId(), interest.getCall().getTitle(),
                         UserSummary.from(interest.getCall().getAuthor()),
-                        interest.getCall().effectiveStatus(today)))
+                        interest.getCall().effectiveStatus(today), messageCount(interest)))
                 .toList();
     }
 
@@ -386,7 +399,8 @@ public class JobCallService {
         boolean mine = ProjectAccessService.sameUser(call.getAuthor(), viewer);
         MyInterest myInterest = viewer == null || mine ? null
                 : interestRepository.findByCallAndArtist(call, viewer)
-                        .map(interest -> new MyInterest(interest.getId(), interest.getStatus(), interest.getProjectId()))
+                        .map(interest -> new MyInterest(interest.getId(), interest.getStatus(), interest.getProjectId(),
+                                messageCount(interest)))
                         .orElse(null);
         User author = call.getAuthor();
         int directed = (int) projectRepository.findByCreatedByUser(author).stream()
@@ -406,7 +420,7 @@ public class JobCallService {
                 .toList();
         return new InterestResponse(interest.getId(), UserSummary.from(interest.getArtist()), interest.getMessage(),
                 interest.getStatus(), interest.getCreatedAt(), postService.toResponses(works, viewer),
-                interest.getProjectId());
+                interest.getProjectId(), messageCount(interest));
     }
 
     private void notify(User to, String type, String message, String link) {

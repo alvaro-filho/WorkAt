@@ -165,7 +165,13 @@ export interface JobCall {
   mine: boolean;
   /** Só para o autor. */
   interestCount: number | null;
-  myInterest: { id: number; status: InterestStatus; projectId: number | null } | null;
+  myInterest: {
+    id: number;
+    status: InterestStatus;
+    projectId: number | null;
+    /** Mensagens na conversa com o estúdio (o artista só escreve depois que o estúdio começa). */
+    messageCount: number;
+  } | null;
 }
 
 export interface CallInterest {
@@ -176,6 +182,7 @@ export interface CallInterest {
   createdAt: string;
   works: Post[];
   projectId: number | null;
+  messageCount: number;
 }
 
 export interface MyInterestItem {
@@ -187,6 +194,23 @@ export interface MyInterestItem {
   callTitle: string;
   company: UserSummary;
   callStatus: CallStatus;
+  messageCount: number;
+}
+
+/** Conversa da Chamada entre o estúdio e um candidato (presa à candidatura). */
+export interface CallMessage {
+  id: number;
+  author: UserSummary;
+  mine: boolean;
+  body: string;
+  createdAt: string;
+}
+
+export interface CallConversation {
+  messages: CallMessage[];
+  canSend: boolean;
+  /** Por que não dá para escrever agora (null quando dá). */
+  blockedReason: string | null;
 }
 
 export interface CallInput {
@@ -786,6 +810,13 @@ export const api = {
   declineInterest: (id: number, interestId: number) =>
     request<CallInterest>(`/calls/${id}/interests/${interestId}/decline`, { method: "POST" }),
   myInterests: () => request<MyInterestItem[]>("/me/interests"),
+  callConversation: (id: number, interestId: number) =>
+    request<CallConversation>(`/calls/${id}/interests/${interestId}/messages`),
+  sendCallMessage: (id: number, interestId: number, body: string) =>
+    request<CallConversation>(`/calls/${id}/interests/${interestId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
   /** Aba Projetos do Explorar. */
   exploreProjects: () =>
     request<PublicProjectCard[]>(

@@ -723,6 +723,39 @@ check("preenchida sai da lista do Explorar", any(x["id"] == jid for x in (lst or
 s, lst, _ = call("GET", f"/calls?author={ua['username']}")
 check("continua no perfil do estúdio", any(x["id"] == jid for x in (lst or [])), True)
 
+# ------------------------------------------------------------------ 14. Conversa da Chamada
+sec("14. Conversa da Chamada")
+conv = f"/calls/{jid}/interests/{caio_it['id']}/messages"
+s, cv, _ = call("GET", conv, tc)
+check("conversa começa vazia e o artista ainda não escreve", (s, len((cv or {}).get("messages", [])), (cv or {}).get("canSend")), (200, 0, False))
+s, _, _ = call("POST", conv, tc, {"body": "Oi, estúdio!"})
+check("quem começa é o estúdio", s, 409)
+s, _, _ = call("GET", conv, tf)
+check("outra pessoa não lê a conversa", s, 403)
+s, _, _ = call("GET", conv)
+check("sem login não lê a conversa", s in (401, 403), True)
+s, cv, _ = call("POST", conv, ta, {"body": "  Você tem agenda em janeiro?  "})
+check("estúdio começa a conversa", (s, [m["body"] for m in (cv or {}).get("messages", [])]), (200, ["Você tem agenda em janeiro?"]))
+s, n, _ = call("GET", "/notifications", tc)
+check("artista é avisado da mensagem", any(x["type"] == "CALL_MESSAGE" for x in (n or {}).get("items", [])), True)
+s, cv, _ = call("POST", conv, tc, {"body": "Tenho sim, a partir do dia 5."})
+check("artista responde (convidado continua conversando)", (s, len((cv or {}).get("messages", [])), cv["messages"][1]["mine"]), (200, 2, True))
+s, n, _ = call("GET", "/notifications", ta)
+check("estúdio é avisado da resposta", any(x["type"] == "CALL_MESSAGE" for x in (n or {}).get("items", [])), True)
+s, _, _ = call("POST", conv, ta, {"body": "x" * 1001})
+check("mensagem acima de 1000 caracteres é recusada", s, 400)
+s, _, _ = call("POST", conv, ta, {"body": "   "})
+check("mensagem vazia é recusada", s, 400)
+s, its, _ = call("GET", f"/calls/{jid}/interests", ta)
+check("lista de interessados mostra quantas mensagens", next(x["messageCount"] for x in its if x["id"] == caio_it["id"]), 2)
+s, mine, _ = call("GET", "/me/interests", tc)
+check("Minhas candidaturas mostra quantas mensagens", [x["messageCount"] for x in (mine or []) if x["callId"] == jid], [2])
+conv_eva = f"/calls/{jid}/interests/{eva_it['id']}/messages"
+s, _, _ = call("POST", conv_eva, ta, {"body": "Obrigado pelo interesse"})
+check("candidatura não selecionada: conversa só para leitura", s, 409)
+s, cv, _ = call("GET", conv_eva, te)
+check("eva vê o motivo de não poder escrever", (s, (cv or {}).get("canSend"), bool((cv or {}).get("blockedReason"))), (200, False, True))
+
 # ------------------------------------------------------------------ Resumo
 fails = [r for r in results if not r[2]]
 print(f"\nRESUMO: {len(results) - len(fails)} OK, {len(fails)} falhas, de {len(results)} verificações")

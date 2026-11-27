@@ -2,13 +2,16 @@ package com.example.backend.controllers;
 
 import com.example.backend.dto.JobCallDtos.CallRequest;
 import com.example.backend.dto.JobCallDtos.CallResponse;
+import com.example.backend.dto.JobCallDtos.Conversation;
 import com.example.backend.dto.JobCallDtos.InterestRequest;
 import com.example.backend.dto.JobCallDtos.InterestResponse;
 import com.example.backend.dto.JobCallDtos.InviteRequest;
 import com.example.backend.dto.JobCallDtos.InviteResult;
+import com.example.backend.dto.JobCallDtos.MessageRequest;
 import com.example.backend.dto.JobCallDtos.MyInterestItem;
 import com.example.backend.models.JobCall;
 import com.example.backend.services.CurrentUser;
+import com.example.backend.services.JobCallMessageService;
 import com.example.backend.services.JobCallService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,10 +25,12 @@ import java.util.List;
 public class JobCallController {
 
     private final JobCallService calls;
+    private final JobCallMessageService messages;
     private final CurrentUser currentUser;
 
-    public JobCallController(JobCallService calls, CurrentUser currentUser) {
+    public JobCallController(JobCallService calls, JobCallMessageService messages, CurrentUser currentUser) {
         this.calls = calls;
+        this.messages = messages;
         this.currentUser = currentUser;
     }
 
@@ -81,6 +86,20 @@ public class JobCallController {
     public InterestResponse decline(@PathVariable Long id, @PathVariable Long interestId,
                                     Authentication authentication) {
         return calls.decline(id, interestId, currentUser.require(authentication));
+    }
+
+    /** Conversa da Chamada: só o estúdio que publicou e o artista daquela candidatura. */
+    @GetMapping("/api/v1/calls/{id}/interests/{interestId}/messages")
+    public Conversation conversation(@PathVariable Long id, @PathVariable Long interestId,
+                                     Authentication authentication) {
+        return messages.conversation(id, interestId, currentUser.require(authentication));
+    }
+
+    @PostMapping("/api/v1/calls/{id}/interests/{interestId}/messages")
+    public Conversation send(@PathVariable Long id, @PathVariable Long interestId,
+                             @RequestBody(required = false) MessageRequest request, Authentication authentication) {
+        return messages.send(id, interestId, currentUser.require(authentication),
+                request == null ? null : request.body());
     }
 
     @GetMapping("/api/v1/me/interests")

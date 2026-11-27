@@ -1,8 +1,18 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { BadgeCheck, CalendarClock, Lock, MapPin, Pencil, Users, Wallet } from "lucide-react";
+import {
+  BadgeCheck,
+  CalendarClock,
+  Lock,
+  MapPin,
+  MessageCircle,
+  Pencil,
+  Users,
+  Wallet,
+} from "lucide-react";
 
 import { ArtImage } from "@/components/art/ArtPieces";
+import { CallConversation } from "@/components/calls/CallConversation";
 import { CallFormDialog } from "@/components/calls/CallFormDialog";
 import { InterestDialog } from "@/components/calls/InterestDialog";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -231,7 +241,18 @@ function CallPage() {
                   )
                 )}
               </div>
-            ) : !user ? (
+            ) : null}
+            {call.myInterest && (
+              <div className="mt-4">
+                <CallConversation
+                  callId={call.id}
+                  interestId={call.myInterest.id}
+                  otherName={call.author.fullName}
+                  studioView={false}
+                />
+              </div>
+            )}
+            {call.myInterest ? null : !user ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-muted-foreground">
                   Entre com uma conta de artista para mostrar interesse.
@@ -340,6 +361,7 @@ function InterestsSection({ call }: { call: JobCall }) {
   const [error, setError] = useState<string | null>(null);
   const [inviting, setInviting] = useState<CallInterest | null>(null);
   const [declining, setDeclining] = useState<CallInterest | null>(null);
+  const [talking, setTalking] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -435,6 +457,20 @@ function InterestsSection({ call }: { call: JobCall }) {
               </ul>
             )}
             <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                variant={talking === item.id ? "secondary" : "outline"}
+                size="sm"
+                aria-expanded={talking === item.id}
+                onClick={() => setTalking(talking === item.id ? null : item.id)}
+              >
+                <MessageCircle className="size-4" />
+                {talking === item.id ? "Fechar conversa" : "Conversar"}
+                {item.messageCount > 0 && talking !== item.id && (
+                  <span className="rounded-full bg-primary/20 px-1.5 text-xs text-primary">
+                    {item.messageCount}
+                  </span>
+                )}
+              </Button>
               {item.status === "INVITED" && item.projectId ? (
                 <Button asChild variant="outline" size="sm">
                   <Link to="/projetos/$projectId" params={{ projectId: String(item.projectId) }}>
@@ -456,6 +492,17 @@ function InterestsSection({ call }: { call: JobCall }) {
                 </>
               ) : null}
             </div>
+            {talking === item.id && (
+              <CallConversation
+                callId={call.id}
+                interestId={item.id}
+                otherName={item.artist.fullName}
+                studioView
+                onCountChange={(count) =>
+                  count !== item.messageCount && replace({ ...item, messageCount: count })
+                }
+              />
+            )}
           </li>
         ))}
       </ul>

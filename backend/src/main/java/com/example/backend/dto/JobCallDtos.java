@@ -25,17 +25,20 @@ public final class JobCallDtos {
                                boolean mine, Long interestCount, MyInterest myInterest) {
     }
 
-    public record MyInterest(Long id, JobInterest.Status status, Long projectId) {
+    /** messageCount: mensagens na conversa com o estúdio (o artista só escreve depois que o estúdio começa). */
+    public record MyInterest(Long id, JobInterest.Status status, Long projectId, long messageCount) {
     }
 
     /** Candidatura vista pelo estúdio: o artista, a mensagem e os trabalhos escolhidos. */
     public record InterestResponse(Long id, UserSummary artist, String message, JobInterest.Status status,
-                                   LocalDateTime createdAt, List<PostResponse> works, Long projectId) {
+                                   LocalDateTime createdAt, List<PostResponse> works, Long projectId,
+                                   long messageCount) {
     }
 
     /** Candidatura vista pelo próprio artista (Minhas candidaturas). */
     public record MyInterestItem(Long id, JobInterest.Status status, LocalDateTime createdAt, Long projectId,
-                                 Long callId, String callTitle, UserSummary company, JobCall.Status callStatus) {
+                                 Long callId, String callTitle, UserSummary company, JobCall.Status callStatus,
+                                 long messageCount) {
     }
 
     public record CallRequest(String title, JobCall.Role role, String description, JobCall.Format format,
@@ -50,5 +53,16 @@ public final class JobCallDtos {
     }
 
     public record InviteResult(Long projectId, InterestResponse interest) {
+    }
+
+    /** Uma mensagem da conversa da Chamada. mine: foi quem está vendo que escreveu. */
+    public record CallMessage(Long id, UserSummary author, boolean mine, String body, LocalDateTime createdAt) {
+    }
+
+    /** Conversa entre o estúdio e um candidato. canSend false vem com o motivo (blockedReason). */
+    public record Conversation(List<CallMessage> messages, boolean canSend, String blockedReason) {
+    }
+
+    public record MessageRequest(String body) {
     }
 }

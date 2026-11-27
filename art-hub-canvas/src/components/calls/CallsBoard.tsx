@@ -157,6 +157,8 @@ export function CallsBoard({ query }: { query: string }) {
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {INTEREST_STATUS_LABEL[item.status]}
+                    {item.messageCount > 0 &&
+                      ` · ${item.messageCount} ${item.messageCount === 1 ? "mensagem" : "mensagens"}`}
                   </span>
                 </Link>
               </li>
