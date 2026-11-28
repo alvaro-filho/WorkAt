@@ -23,6 +23,8 @@ public interface PostCommentRepository extends JpaRepository<PostComment, Long> 
 
     boolean existsByParent(PostComment parent);
 
+    List<PostComment> findByAuthor(com.example.backend.models.User author);
+
     /** Limite anti-spam: quantos comentários a pessoa fez desde um momento. */
     long countByAuthorAndCreatedAtAfter(User author, LocalDateTime since);
 

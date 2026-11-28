@@ -30,5 +30,17 @@ public interface TaskFileRepository extends JpaRepository<TaskFile, Long> {
             "select coalesce(sum(i.sizeBytes), 0) from PostImage i where i.storedName is not null and i.post.author = :user")
     long totalPostBytesOf(@org.springframework.data.repository.query.Param("user") com.example.backend.models.User user);
 
+    /** Painel de administração: tudo o que está guardado (arquivos de tarefa + imagens de publicação). */
+    @org.springframework.data.jpa.repository.Query("select coalesce(sum(f.sizeBytes), 0) from TaskFile f")
+    long totalBytes();
+
+    @org.springframework.data.jpa.repository.Query(
+            "select coalesce(sum(i.sizeBytes), 0) from PostImage i where i.storedName is not null")
+    long totalPostBytes();
+
+    @org.springframework.data.jpa.repository.Query(
+            "select coalesce(sum(f.sizeBytes), 0) from TaskFile f where f.task.project = :project")
+    long totalBytesOfProject(@org.springframework.data.repository.query.Param("project") com.example.backend.models.Project project);
+
     List<TaskFile> findByUploadedBy(com.example.backend.models.User user);
 }

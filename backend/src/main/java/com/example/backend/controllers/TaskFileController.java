@@ -27,6 +27,15 @@ public class TaskFileController {
     private final TaskFileService taskFileService;
     private final UserRepository userRepository;
 
+
+    /** Opcional (testes antigos constroem sem ele): travas de VPN, banimento e registro de acesso. */
+    private com.example.backend.services.SecurityGate securityGate;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setSecurityGate(com.example.backend.services.SecurityGate securityGate) {
+        this.securityGate = securityGate;
+    }
+
     public TaskFileController(TaskFileService taskFileService, UserRepository userRepository) {
         this.taskFileService = taskFileService;
         this.userRepository = userRepository;
@@ -44,6 +53,7 @@ public class TaskFileController {
                                                    @RequestParam(value = "final", defaultValue = "false") boolean markAsFinal,
                                                    Authentication authentication) {
         User user = findAuthenticatedUser(authentication);
+        if (securityGate != null) securityGate.checkPosting(user, com.example.backend.models.SecurityEvent.Type.UPLOAD);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(TaskFileResponse.from(taskFileService.upload(taskId, user, file, markAsFinal)));
     }

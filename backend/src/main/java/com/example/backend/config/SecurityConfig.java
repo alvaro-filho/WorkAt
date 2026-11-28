@@ -70,6 +70,8 @@ public class SecurityConfig {
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/users/*/profile",
                             "/api/v1/projects/*/public").permitAll()
                     // Página de erro do Spring: sem isto, todo erro 500 vira 403 e o frontend desloga o usuário.
+                    // Painel de administração: quem não é admin recebe 404 do próprio controller (nem 401).
+                    .requestMatchers("/api/v1/admin/**").permitAll()
                     .requestMatchers("/error").permitAll()
                     .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/health").permitAll()
                     // Todas as outras requisições exigem autenticação

@@ -24,7 +24,10 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     /** Feed Publicações: só o que é público agora, mais novo primeiro, paginado por id. Espelha PostService.isPublic. */
     @EntityGraph(attributePaths = {"author", "project", "task"})
-    @Query("select p from Post p left join p.project pr left join p.task t where p.id < :before and ("
+    @Query("select p from Post p left join p.project pr left join pr.createdByUser owner left join p.task t"
+            + " where p.id < :before and p.pendingReview = false and p.author.suspended = false"
+            + " and p.author.banned = false"
+            + " and (owner is null or (owner.suspended = false and owner.banned = false)) and ("
             + "pr is null"
             + " or (p.kind = com.example.backend.models.PostKind.STANDALONE and " + NDA_OPEN + ")"
             + " or (p.kind <> com.example.backend.models.PostKind.STANDALONE and pr.autoWip = true and " + NDA_OPEN
@@ -34,6 +37,19 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     @EntityGraph(attributePaths = {"author", "project", "task"})
     List<Post> findByAuthorOrderByIdDesc(User author);
+
+    long countByAuthor(User author);
+
+    long countByAuthorAndPendingReviewFalse(User author);
+
+    long countByAuthorAndPendingReviewTrue(User author);
+
+    @EntityGraph(attributePaths = {"author"})
+    List<Post> findByPendingReviewTrueOrderByIdAsc();
+
+    @Query("select count(p) from Post p where p.pendingReview = true and p.author.banned = false"
+            + " and p.author.suspended = false")
+    long countByPendingReviewTrue();
 
     @EntityGraph(attributePaths = {"author", "project", "task"})
     List<Post> findByProjectOrderByIdDesc(Project project);

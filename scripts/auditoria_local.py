@@ -21,9 +21,11 @@ results = []  # (secao, label, ok, detalhe)
 section = "geral"
 
 
-def call(method, path, token=None, body=None, raw=None, ctype="application/json"):
+def call(method, path, token=None, body=None, raw=None, ctype="application/json", headers=None):
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
     req = urllib.request.Request(BASE + path, method=method, data=data)
+    for key, value in (headers or {}).items():
+        req.add_header(key, value)
     if data is not None:
         req.add_header("Content-Type", ctype)
     if token:
@@ -80,6 +82,22 @@ def png(r=255, g=0, b=0, size=64):
             + chunk(b"IDAT", zlib.compress(row * size)) + chunk(b"IEND", b""))
 
 
+ADMIN_EMAIL = "admin@audit.test"  # precisa estar em ARTHUB_ADMIN_EMAILS no backend da auditoria
+ADMIN_TOK = None
+
+
+def admin_token():
+    """Conta de administrador da auditoria (libera as contas de teste, que nascem em quarentena)."""
+    global ADMIN_TOK
+    if ADMIN_TOK is None:
+        s, b, _ = call("POST", "/auth/register", body={"fullName": "Admin Auditoria", "username": "auditadmin",
+                                                        "email": ADMIN_EMAIL, "password": AUDIT_PASSWORD, "role": "ARTIST"})
+        if s != 201:
+            s, b, _ = call("POST", "/auth/login", body={"email": ADMIN_EMAIL, "password": AUDIT_PASSWORD})
+        ADMIN_TOK = b["token"]
+    return ADMIN_TOK
+
+
 def user(username, name, role):
     email = f"{username}@workat.test"
     s, b, _ = call("POST", "/auth/register", body={"fullName": name, "username": username, "email": email,
@@ -89,6 +107,8 @@ def user(username, name, role):
     if s not in (200, 201):
         print("Não consegui criar/entrar com", username, s, b)
         sys.exit(1)
+    # Conta nova nasce em quarentena (V3.1): a auditoria libera as contas de teste pelo painel.
+    call("POST", f"/admin/users/{b['user']['id']}/trust", admin_token())
     return b["token"], b["user"]
 
 
@@ -345,7 +365,7 @@ check("fabio edita canvas no cooperativo", s, 200)
 sec("7. Publicações, NDA e Explorar")
 
 
-def new_post(token, name, content, title=None, subtitle=None):
+def new_post(token, name, content, title=None, subtitle=None, headers=None):
     bnd = uuid.uuid4().hex
     body = b""
     for k, v in (("title", title), ("subtitle", subtitle)):
@@ -353,7 +373,7 @@ def new_post(token, name, content, title=None, subtitle=None):
             body += f"--{bnd}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n".encode()
     body += (f"--{bnd}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\n"
              f"Content-Type: application/octet-stream\r\n\r\n").encode() + content + f"\r\n--{bnd}--\r\n".encode()
-    return call("POST", "/posts", token, raw=body, ctype=f"multipart/form-data; boundary={bnd}")
+    return call("POST", "/posts", token, raw=body, ctype=f"multipart/form-data; boundary={bnd}", headers=headers)
 
 
 def feed():
@@ -812,6 +832,133 @@ s, arts, _ = call("GET", "/explore/artists?available=true")
 check("desligado: sai do filtro de disponíveis", uc["username"] in [a["user"]["username"] for a in (arts or [])], False)
 s, arts, _ = call("GET", "/explore/artists")
 check("continua no diretório geral (tem trabalho público)", uc["username"] in [a["user"]["username"] for a in (arts or [])], True)
+
+# ------------------------------------------------------------------ 16. Segurança e moderação (V3.1)
+sec("16. Segurança e moderação")
+import io as _io, zipfile as _zip
+VPN_IP = "2.26.8.1"          # dentro da lista de VPN/datacenter
+TROLL_IP = "203.0.113.50"    # IP público fictício do "invasor"
+TROLL_DEV = f"aparelho-troll-{sfx}"
+H_TROLL = {"X-Forwarded-For": TROLL_IP, "X-Device-Id": TROLL_DEV}
+adm = admin_token()
+
+s, _, _ = call("GET", "/admin/overview", tc)
+check("quem não é admin não acha o painel (404)", s, 404)
+s, _, _ = call("GET", "/admin/overview")
+check("sem login também 404", s, 404)
+s, ov, _ = call("GET", "/admin/overview", adm)
+check("admin abre a visão geral", (s, "users" in (ov or {})), (200, True))
+
+s, _, _ = call("POST", "/auth/register", body={"fullName": "V", "username": f"vpn_{sfx}", "email": f"vpn{sfx}@workat.test",
+                                              "password": AUDIT_PASSWORD, "role": "ARTIST"}, headers={"X-Forwarded-For": VPN_IP})
+check("cadastro com VPN é barrado (403)", s, 403)
+s, msg, _ = call("POST", "/auth/login", body={"email": ub["email"], "password": AUDIT_PASSWORD},
+                 headers={"X-Forwarded-For": VPN_IP})
+check("login com VPN é barrado com o aviso", (s, "VPN" in str(msg)), (403, True))
+s, _, _ = new_post(tb, "vpn.png", png(10, 10, 10), "Com VPN", headers={"X-Forwarded-For": VPN_IP})
+check("publicar com VPN é barrado", s, 403)
+s, _, _ = call("GET", "/feed?limit=5", headers={"X-Forwarded-For": VPN_IP})
+check("ver artes com VPN continua livre", s, 200)
+s, _, _ = call("POST", "/auth/register", body={"fullName": "D", "username": f"desc_{sfx}", "email": f"d{sfx}@mailinator.com",
+                                              "password": AUDIT_PASSWORD, "role": "ARTIST"})
+check("e-mail descartável é recusado", s, 400)
+
+s, tb_reg, _ = call("POST", "/auth/register", body={"fullName": "Troll", "username": f"troll_{sfx}",
+                                                     "email": f"troll{sfx}@workat.test", "password": AUDIT_PASSWORD,
+                                                     "role": "ARTIST"}, headers=H_TROLL)
+check("conta nova é criada (em quarentena)", s, 201)
+tt, ut = tb_reg["token"], tb_reg["user"]
+s, tp, _ = new_post(tt, "nudez.png", png(250, 180, 160), "Imprópria", headers=H_TROLL)
+check("publicação de conta nova fica esperando aprovação", (s, (tp or {}).get("pendingReview")), (201, True))
+check("e não entra no feed", any(p["id"] == tp["id"] for p in feed()), False)
+s, _, _ = call("GET", f"/posts/{tp['id']}")
+check("nem abre para quem não é o autor", s in (403, 404), True)
+s, q, _ = call("GET", "/admin/review", adm)
+check("aparece na fila de aprovação do admin", any(p["id"] == tp["id"] for p in (q or [])), True)
+s, n, _ = call("GET", "/notifications", adm)
+check("admin é avisado da publicação pendente", any(x["type"] == "MODERATION_PENDING" for x in (n or {}).get("items", [])), True)
+s, _, _ = call("POST", "/me/avatar", tt, raw=b"x", ctype="multipart/form-data; boundary=zz")
+check("conta nova ainda não troca a foto", s in (400, 403), True)
+
+s, _, _ = call("POST", f"/admin/posts/{tp['id']}/remove", adm, {"reason": "Conteúdo adulto"})
+check("admin remove a publicação", s, 204)
+s, n, _ = call("GET", "/notifications", tt, headers=H_TROLL)
+msgs = [x["message"] for x in (n or {}).get("items", []) if x["type"] == "MODERATION_REMOVED"]
+check("autor é avisado de que quebrou as diretrizes", any("diretrizes" in m and "Conteúdo adulto" in m for m in msgs), True)
+s, tp2, _ = new_post(tt, "outra.png", png(0, 90, 200), "Outra", headers=H_TROLL)
+s, _, _ = call("POST", f"/admin/posts/{tp2['id']}/approve", adm)
+check("admin aprova uma publicação", s, 204)
+check("aprovada entra no feed", any(p["id"] == tp2["id"] for p in feed()), True)
+
+s, t2, _ = call("POST", "/auth/register", body={"fullName": "Troll 2", "username": f"troll2_{sfx}",
+                                                 "email": f"troll2{sfx}@workat.test", "password": AUDIT_PASSWORD,
+                                                 "role": "ARTIST"}, headers={"X-Device-Id": TROLL_DEV})
+s, det, _ = call("GET", f"/admin/users/{ut['id']}", adm)
+check("ficha mostra o registro de acesso com IP e aparelho",
+      any(e["ip"] == TROLL_IP and e["deviceId"] == TROLL_DEV for e in (det or {}).get("events", [])), True)
+check("ficha mostra a conta ligada pelo mesmo aparelho",
+      any(r["username"] == f"troll2_{sfx}" for r in (det or {}).get("related", [])), True)
+
+s, _, _ = call("POST", f"/admin/users/{ut['id']}/suspend", adm, {"days": 1, "reason": "Avaliação"})
+check("admin suspende por 1 dia", s, 200)
+s, msg, _ = call("POST", "/auth/login", body={"email": ut["email"], "password": AUDIT_PASSWORD}, headers=H_TROLL)
+check("suspensa não entra e vê o prazo", (s, "suspensa" in str(msg)), (401, True))
+s, _, _ = call("GET", f"/users/{ut['username']}/profile")
+check("perfil suspenso some", s, 404)
+check("publicação de quem está suspenso some do feed", any(p["id"] == tp2["id"] for p in feed()), False)
+s, _, _ = call("POST", f"/admin/users/{ut['id']}/reactivate", adm, {})
+check("admin reativa", s, 200)
+check("depois de reativar, volta ao feed", any(p["id"] == tp2["id"] for p in feed()), True)
+
+s, _, _ = call("POST", f"/admin/users/{ut['id']}/ban", adm, {"reason": "Nudez", "password": "errada"})
+check("banir pede a senha do admin", s, 400)
+s, det, _ = call("POST", f"/admin/users/{ut['id']}/ban", adm, {"reason": "Postou nudez", "password": AUDIT_PASSWORD})
+check("admin bane a conta", (s, ((det or {}).get("user") or {}).get("status")), (200, "BANNED"))
+kinds = sorted({b["kind"] for b in (det or {}).get("bans", [])})
+check("banimento bloqueia e-mail, aparelho e IP", kinds, ["DEVICE", "EMAIL", "IP"])
+check("banir não apaga: a prova fica guardada", len((det or {}).get("evidences", [])) >= 2, True)
+check("conteúdo do banido some do feed", any(p["id"] == tp2["id"] for p in feed()), False)
+s, _, _ = call("POST", "/auth/login", body={"email": ut["email"], "password": AUDIT_PASSWORD})
+check("banido não entra nem de outro IP (e-mail banido)", s, 403)
+s, _, _ = call("POST", "/auth/register", body={"fullName": "T3", "username": f"troll3_{sfx}", "email": f"t3{sfx}@workat.test",
+                                              "password": AUDIT_PASSWORD, "role": "ARTIST"}, headers={"X-Forwarded-For": TROLL_IP})
+check("cadastro do mesmo IP banido é barrado", s, 403)
+s, _, _ = call("POST", "/auth/register", body={"fullName": "T4", "username": f"troll4_{sfx}", "email": f"t4{sfx}@workat.test",
+                                              "password": AUDIT_PASSWORD, "role": "ARTIST"},
+               headers={"X-Forwarded-For": "198.51.100.9", "X-Device-Id": TROLL_DEV})
+check("cadastro do mesmo aparelho (outro IP) é barrado", s, 403)
+s, _, _ = call("POST", "/auth/register", body={"fullName": "Ok", "username": f"limpo_{sfx}", "email": f"limpo{sfx}@workat.test",
+                                              "password": AUDIT_PASSWORD, "role": "ARTIST"},
+               headers={"X-Forwarded-For": "198.51.100.10", "X-Device-Id": f"aparelho-limpo-{sfx}"})
+check("outra pessoa (outro IP e aparelho) cadastra normal", s, 201)
+s, _, _ = call("POST", "/auth/register", body={"fullName": "Spoof", "username": f"spoof_{sfx}", "email": f"sp{sfx}@workat.test",
+                                              "password": AUDIT_PASSWORD, "role": "ARTIST"},
+               headers={"X-Forwarded-For": "8.8.8.8, " + TROLL_IP})
+check("IP falso à esquerda do X-Forwarded-For não engana o bloqueio", s, 403)
+
+s, z, hd = call("GET", f"/admin/users/{ut['id']}/dossier", adm)
+names = _zip.ZipFile(_io.BytesIO(z)).namelist() if s == 200 else []
+check("dossiê sem imagens baixa em ZIP", (s, "dossie.json" in names, "verificacao.txt" in names,
+                                          any(n.startswith("provas/") for n in names), any(n.startswith("imagens/") for n in names)),
+      (200, True, True, True, False))
+dossie = json.loads(_zip.ZipFile(_io.BytesIO(z)).read("dossie.json")) if s == 200 else {}
+check("dossiê traz o IP e o aparelho do acesso", any(e.get("ip") == TROLL_IP for e in dossie.get("registrosDeAcesso", [])), True)
+check("dossiê traz o hash de cada imagem",
+      all(i.get("sha256") for p in dossie.get("publicacoes", []) for i in p.get("imagens", [])) and bool(dossie.get("publicacoes")), True)
+s, z2, _ = call("GET", f"/admin/users/{ut['id']}/dossier?images=true", adm)
+check("dossiê com imagens inclui as imagens", s == 200 and any(n.startswith("imagens/") for n in _zip.ZipFile(_io.BytesIO(z2)).namelist()), True)
+
+s, _, _ = call("POST", f"/admin/users/{ut['id']}/purge", adm, {"password": AUDIT_PASSWORD})
+check("apagar o conteúdo do banido (com senha)", s, 200)
+s, det, _ = call("GET", f"/admin/users/{ut['id']}", adm)
+check("conteúdo apagado, provas continuam", (((det or {}).get("user") or {}).get("postCount"), len((det or {}).get("evidences", [])) >= 3),
+      (0, True))
+s, me, _ = call("GET", "/me", adm)
+s, _, _ = call("POST", f"/admin/users/{me['id']}/ban", adm, {"reason": "teste", "password": AUDIT_PASSWORD})
+check("admin não bane a si mesmo", s, 400)
+s, lg, _ = call("GET", "/admin/log", adm)
+acts = {a["action"] for a in (lg or [])}
+check("registro tem as ações", {"SUSPEND", "REACTIVATE", "BAN", "REMOVE_POST", "APPROVE", "DOSSIER", "PURGE"} <= acts, True)
 
 # ------------------------------------------------------------------ Resumo
 fails = [r for r in results if not r[2]]

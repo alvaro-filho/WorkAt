@@ -12,6 +12,7 @@ import {
   Palette,
   PenLine,
   Settings,
+  ShieldCheck,
   UserPlus,
   UserRound,
   type LucideIcon,
@@ -45,7 +46,10 @@ export function useMenuCounts(enabled: boolean): MenuCounts {
     let active = true;
     const load = async () => {
       try {
-        const [unread, invitations] = await Promise.all([api.unreadNotifications(), api.myInvitations()]);
+        const [unread, invitations] = await Promise.all([
+          api.unreadNotifications(),
+          api.myInvitations(),
+        ]);
         if (active) setCounts({ notifications: unread.unread, invitations: invitations.length });
       } catch {
         // Sem conexão: mantém os números anteriores.
@@ -144,6 +148,8 @@ export function NavRail({
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const items = navItems(user?.username ?? null, counts);
+  // Painel de administração: o link só aparece para quem está na lista de administradores do servidor.
+  if (user?.admin) items.push({ title: "Administração", url: "/admin", icon: ShieldCheck });
   const { openComposer, composer } = usePublish();
   // Na gaveta sempre com rótulos; na coluna, os rótulos aparecem só a partir de xl.
   const label = inDrawer ? "inline" : "hidden xl:inline";
@@ -183,10 +189,14 @@ export function NavRail({
             >
               <span className="flex items-center gap-5 rounded-full p-3 transition-colors group-hover:bg-white/10">
                 <span className="relative">
-                  <item.icon className={`size-[26px] ${active ? "stroke-[2.6]" : "stroke-[1.75]"}`} />
+                  <item.icon
+                    className={`size-[26px] ${active ? "stroke-[2.6]" : "stroke-[1.75]"}`}
+                  />
                   <CountBadge value={item.badge} />
                 </span>
-                <span className={`${label} pr-4 text-xl ${active ? "font-bold" : "font-normal"}`}>{item.title}</span>
+                <span className={`${label} pr-4 text-xl ${active ? "font-bold" : "font-normal"}`}>
+                  {item.title}
+                </span>
               </span>
             </Link>
           );
@@ -211,10 +221,17 @@ export function NavRail({
           </Button>
         </div>
       ) : (
-        <div className={`my-4 space-y-2 ${inDrawer ? "" : "hidden xl:block"} rounded-2xl border border-border p-4`}>
+        <div
+          className={`my-4 space-y-2 ${inDrawer ? "" : "hidden xl:block"} rounded-2xl border border-border p-4`}
+        >
           <p className="text-[17px] font-extrabold">Novo por aqui?</p>
-          <p className="text-sm text-muted-foreground">Crie sua conta para montar seu portfólio e trabalhar em projetos.</p>
-          <Button asChild className="gradient-primary w-full rounded-full font-bold text-primary-foreground">
+          <p className="text-sm text-muted-foreground">
+            Crie sua conta para montar seu portfólio e trabalhar em projetos.
+          </p>
+          <Button
+            asChild
+            className="gradient-primary w-full rounded-full font-bold text-primary-foreground"
+          >
             <Link to="/login" search={{ modo: "cadastro" }} onClick={onNavigate}>
               <UserPlus className="mr-1 size-4" /> Criar conta
             </Link>
@@ -247,10 +264,16 @@ export function NavRail({
                 className="flex w-full items-center gap-3 rounded-full p-3 text-left hover:bg-white/10"
               >
                 <UserAvatar name={user.fullName ?? user.username} src={user.avatarUrl} size="md" />
-                <span className={`${inDrawer ? "flex" : "hidden xl:flex"} min-w-0 flex-1 items-center gap-2`}>
+                <span
+                  className={`${inDrawer ? "flex" : "hidden xl:flex"} min-w-0 flex-1 items-center gap-2`}
+                >
                   <span className="min-w-0 flex-1 leading-5">
-                    <span className="block truncate text-[15px] font-bold">{user.fullName ?? user.username}</span>
-                    <span className="block truncate text-[15px] text-muted-foreground">@{user.username}</span>
+                    <span className="block truncate text-[15px] font-bold">
+                      {user.fullName ?? user.username}
+                    </span>
+                    <span className="block truncate text-[15px] text-muted-foreground">
+                      @{user.username}
+                    </span>
                   </span>
                   <MoreHorizontal className="size-5 shrink-0" />
                 </span>

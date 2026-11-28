@@ -1,5 +1,6 @@
 package com.example.backend.controllers;
 
+import com.example.backend.models.User;
 import com.example.backend.dto.CommentThreadResponse;
 import com.example.backend.services.CurrentUser;
 import com.example.backend.services.PostCommentService;
@@ -16,6 +17,14 @@ public class PostCommentController {
 
     private final PostCommentService comments;
     private final CurrentUser currentUser;
+
+    /** Opcional (testes antigos constroem sem ele): travas de VPN, banimento e registro de acesso. */
+    private com.example.backend.services.SecurityGate securityGate;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setSecurityGate(com.example.backend.services.SecurityGate securityGate) {
+        this.securityGate = securityGate;
+    }
 
     public PostCommentController(PostCommentService comments, CurrentUser currentUser) {
         this.comments = comments;
@@ -36,7 +45,9 @@ public class PostCommentController {
     @PostMapping("/api/v1/posts/{postId}/comments")
     public CommentThreadResponse addToPost(@PathVariable Long postId, @RequestBody CommentRequest request,
                                            Authentication authentication) {
-        return comments.addToPost(postId, currentUser.require(authentication),
+        User user = currentUser.require(authentication);
+        if (securityGate != null) securityGate.checkPosting(user, com.example.backend.models.SecurityEvent.Type.COMMENT);
+        return comments.addToPost(postId, user,
                 request == null ? null : request.body(), request == null ? null : request.parentId());
     }
 
@@ -55,7 +66,9 @@ public class PostCommentController {
     @PostMapping("/api/v1/projects/{projectId}/public/comments")
     public CommentThreadResponse addToProject(@PathVariable Long projectId, @RequestBody CommentRequest request,
                                               Authentication authentication) {
-        return comments.addToProject(projectId, currentUser.require(authentication),
+        User user = currentUser.require(authentication);
+        if (securityGate != null) securityGate.checkPosting(user, com.example.backend.models.SecurityEvent.Type.COMMENT);
+        return comments.addToProject(projectId, user,
                 request == null ? null : request.body(), request == null ? null : request.parentId());
     }
 

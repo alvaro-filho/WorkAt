@@ -8,16 +8,23 @@ public record AuthUserResponse(
         String username,
         String email,
         String role,
-        String userType
+        String userType,
+        /** Está na lista de administradores (mostra o link do painel). */
+        boolean admin
 ) {
     public static AuthUserResponse from(User user) {
+        return from(user, false);
+    }
+
+    public static AuthUserResponse from(User user, boolean admin) {
         return new AuthUserResponse(
                 user.getId(),
                 user.getFullName(),
                 user.getUsername(),
                 user.getEmail(),
                 user.getRole().name(),
-                user.getUserType()
+                user.getUserType(),
+                admin
         );
     }
 }

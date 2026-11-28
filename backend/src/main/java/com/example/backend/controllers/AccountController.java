@@ -33,6 +33,14 @@ public class AccountController {
     private final AccountService accounts;
     private final CurrentUser currentUser;
 
+    /** Opcional (testes antigos constroem o controller sem ele): marca quem é administrador. */
+    private com.example.backend.services.AdminAccess adminAccess;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setAdminAccess(com.example.backend.services.AdminAccess adminAccess) {
+        this.adminAccess = adminAccess;
+    }
+
     public AccountController(AccountService accounts, CurrentUser currentUser) {
         this.accounts = accounts;
         this.currentUser = currentUser;
@@ -42,7 +50,8 @@ public class AccountController {
                                   String avatarUrl, String bio, List<String> specialties, List<String> links,
                                   LocalDateTime createdAt, long storageUsedBytes, long storageQuotaBytes,
                                   String bannerUrl, String avatarCrop, String bannerCrop,
-                                  boolean inviteByUsername, ArtistDtos.Availability availability) {
+                                  boolean inviteByUsername, ArtistDtos.Availability availability,
+                                  boolean admin) {
     }
 
     public record ProfileUpdate(String fullName, String bio, List<String> specialties, List<String> links) {
@@ -64,9 +73,9 @@ public class AccountController {
         return new AccountResponse(user.getId(), user.getFullName(), user.getUsername(), user.getEmail(),
                 user.getRole().name(), user.avatarUrl(), user.getBio(),
                 ProfileResponse.split(user.getSpecialties(), ","), ProfileResponse.split(user.getLinks(), "\n"),
-                user.getCreatedAt(), accounts.usedBytes(user), accounts.quotaBytes(), user.bannerUrl(),
+                user.getCreatedAt(), accounts.usedBytes(user), accounts.quotaBytes(user), user.bannerUrl(),
                 user.getAvatarCrop(), user.getBannerCrop(), user.isInviteByUsername(),
-                ArtistDtos.Availability.of(user));
+                ArtistDtos.Availability.of(user), adminAccess != null && adminAccess.isAdmin(user));
     }
 
     @GetMapping("/api/v1/me")

@@ -6,6 +6,39 @@ export interface ApiUser {
   role: "ARTIST" | "COMPANY";
   userType?: string;
   avatarUrl?: string | null;
+  /** Está na lista de administradores (mostra o link do painel). */
+  admin?: boolean;
+}
+
+/**
+ * Código deste aparelho/navegador, criado na primeira visita e mandado em toda chamada (X-Device-Id).
+ * Serve para o registro de acesso e para o banimento por aparelho.
+ */
+export function deviceId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    let id = window.localStorage.getItem("workatDevice");
+    if (!id || !/^[A-Za-z0-9-]{8,64}$/.test(id)) {
+      id =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `d-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+      window.localStorage.setItem("workatDevice", id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
+
+/** Cabeçalhos de autenticação + aparelho, para as chamadas feitas fora do request(). */
+export function authHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = typeof window === "undefined" ? null : window.localStorage.getItem("authToken");
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const device = deviceId();
+  if (device) headers["X-Device-Id"] = device;
+  return headers;
 }
 
 export interface AuthResponse {
@@ -111,6 +144,8 @@ export interface Post {
   /** Comentários visíveis e se a publicação aceita novos. */
   commentCount: number;
   commentsEnabled: boolean;
+  /** Esperando a aprovação da moderação (conta nova): só o autor e o administrador veem. */
+  pendingReview?: boolean;
 }
 
 /** Comentário de feedback (removido = apagado com respostas: sem autor nem texto). */
@@ -531,6 +566,8 @@ async function request<T>(
 
   const token = window.localStorage.getItem("authToken");
   if (token && options.sendAuthorization !== false) headers.set("Authorization", `Bearer ${token}`);
+  const device = deviceId();
+  if (device) headers.set("X-Device-Id", device);
 
   let result: { response: Response; responseText: string };
   try {
@@ -990,6 +1027,8 @@ export function uploadTaskFile(
     xhr.open("POST", `/api/v1/tasks/${taskId}/files`);
     const token = window.localStorage.getItem("authToken");
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    const device = deviceId();
+    if (device) xhr.setRequestHeader("X-Device-Id", device);
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable)
         options.onProgress?.(Math.round((event.loaded / event.total) * 100));
@@ -1017,9 +1056,8 @@ export function uploadTaskFile(
 
 /** Imagem original da própria foto ou capa (para reajustar o enquadramento). */
 export async function fetchProfileOriginal(kind: "avatar" | "banner"): Promise<Blob> {
-  const token = window.localStorage.getItem("authToken");
   const response = await fetch(`/api/v1/me/${kind}/original`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: authHeaders(),
   });
   if (!response.ok)
     throw new ApiError(`Não foi possível abrir a imagem (${response.status}).`, response.status);
@@ -1028,9 +1066,8 @@ export async function fetchProfileOriginal(kind: "avatar" | "banner"): Promise<B
 
 /** Baixa o conteúdo de um arquivo com o token (não existe link público para arquivo privado). */
 export async function fetchFileBlob(fileId: number): Promise<Blob> {
-  const token = window.localStorage.getItem("authToken");
   const response = await fetch(`/api/v1/files/${fileId}/content`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: authHeaders(),
   });
   if (!response.ok)
     throw new ApiError(`Não foi possível baixar o arquivo (${response.status}).`, response.status);
@@ -1042,11 +1079,10 @@ export async function fetchFileBlob(fileId: number): Promise<Blob> {
  * que o servidor mandar.
  */
 export async function downloadWithAuth(path: string, fallbackName: string): Promise<void> {
-  const token = window.localStorage.getItem("authToken");
   let response: Response;
   try {
     response = await fetch(`/api/v1${path}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: authHeaders(),
     });
   } catch {
     throw new ApiError(friendlyError(0, null), 0);
@@ -1074,3 +1110,146 @@ export async function downloadWithAuth(path: string, fallbackName: string): Prom
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+// ---- Painel de administração (só para os e-mails de ARTHUB_ADMIN_EMAILS) ----
+
+export type AdminStatus = "ACTIVE" | "SUSPENDED" | "BANNED";
+
+export interface AdminUserRow {
+  id: number;
+  fullName: string;
+  username: string;
+  email: string;
+  role: "ARTIST" | "COMPANY";
+  avatarUrl: string | null;
+  createdAt: string | null;
+  lastLoginAt: string | null;
+  status: AdminStatus;
+  suspendedUntil: string | null;
+  usedBytes: number;
+  quotaBytes: number;
+  postCount: number;
+  admin: boolean;
+}
+
+export interface AdminActionRow {
+  id: number;
+  adminEmail: string;
+  action: string;
+  targetType: string;
+  targetId: number | null;
+  targetLabel: string | null;
+  reason: string | null;
+  detail: string | null;
+  createdAt: string;
+}
+
+export interface AdminOverview {
+  users: {
+    total: number;
+    artists: number;
+    companies: number;
+    suspended: number;
+    banned: number;
+    newLast30Days: number;
+  };
+  posts: number;
+  pendingPosts: number;
+  projects: number;
+  openCalls: number;
+  storage: { usedBytes: number | null; limitBytes: number };
+  database: { usedBytes: number | null; limitBytes: number };
+  defaultQuotaMb: number;
+  recentSignups: AdminUserRow[];
+  recentActions: AdminActionRow[];
+}
+
+export interface AdminEventRow {
+  id: number;
+  type: string;
+  ip: string | null;
+  userAgent: string | null;
+  deviceId: string | null;
+  email: string | null;
+  detail: string | null;
+  createdAt: string;
+}
+
+export interface AdminUserDetail {
+  user: AdminUserRow;
+  bio: string | null;
+  specialties: string[];
+  suspensionReason: string | null;
+  bannedAt: string | null;
+  banReason: string | null;
+  storageQuotaMb: number | null;
+  adminNote: string | null;
+  trusted: boolean;
+  pendingPosts: number;
+  projects: {
+    id: number;
+    name: string;
+    type: ProjectType;
+    role: "OWNER" | "MEMBER";
+    status: "ACTIVE" | "CLOSED";
+    nda: boolean;
+    publicView: boolean;
+    members: number;
+    bytes: number;
+  }[];
+  publicPosts: Post[];
+  callCount: number;
+  actions: AdminActionRow[];
+  events: AdminEventRow[];
+  related: AdminUserRow[];
+  evidences: {
+    id: number;
+    action: string;
+    reason: string | null;
+    adminEmail: string | null;
+    sha256: string;
+    createdAt: string;
+  }[];
+  bans: {
+    id: number;
+    kind: "IP" | "DEVICE" | "EMAIL";
+    value: string;
+    createdAt: string;
+    expiresAt: string | null;
+    active: boolean;
+  }[];
+}
+
+const json = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
+
+export const adminApi = {
+  overview: () => request<AdminOverview>("/admin/overview", {}, { authFailure: "ignore" }),
+  users: (filters: { q?: string; status?: string; role?: string; sort?: string } = {}) =>
+    request<AdminUserRow[]>(
+      `/admin/users?${new URLSearchParams(
+        Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) as Record<string, string>,
+      ).toString()}`,
+    ),
+  user: (id: number) => request<AdminUserDetail>(`/admin/users/${id}`),
+  suspend: (id: number, days: number | null, reason: string) =>
+    request<AdminUserDetail>(`/admin/users/${id}/suspend`, json({ days, reason })),
+  reactivate: (id: number, reason?: string) =>
+    request<AdminUserDetail>(`/admin/users/${id}/reactivate`, json({ reason: reason ?? null })),
+  ban: (id: number, reason: string, password: string) =>
+    request<AdminUserDetail>(`/admin/users/${id}/ban`, json({ reason, password })),
+  purge: (id: number, password: string) =>
+    request<AdminUserDetail>(`/admin/users/${id}/purge`, json({ password })),
+  trust: (id: number) => request<AdminUserDetail>(`/admin/users/${id}/trust`, { method: "POST" }),
+  update: (id: number, changes: { quotaMb?: number; note?: string }) =>
+    request<AdminUserDetail>(`/admin/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(changes),
+    }),
+  review: () => request<Post[]>("/admin/review"),
+  approve: (postId: number) => request<void>(`/admin/posts/${postId}/approve`, { method: "POST" }),
+  removePost: (postId: number, reason: string) =>
+    request<void>(`/admin/posts/${postId}/remove`, json({ reason })),
+  log: (limit = 200) => request<AdminActionRow[]>(`/admin/log?limit=${limit}`),
+  dossier: (id: number, images: boolean) =>
+    downloadWithAuth(`/admin/users/${id}/dossier?images=${images}`, `dossie-conta-${id}.zip`),
+};

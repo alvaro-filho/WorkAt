@@ -22,6 +22,23 @@ public class AuthController {
     private final UserService userService;
     private final JwtService jwtService;
 
+    /** Opcional: marca no login quem é administrador (mostra o link do painel). */
+    private com.example.backend.services.AdminAccess adminAccess;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setAdminAccess(com.example.backend.services.AdminAccess adminAccess) {
+        this.adminAccess = adminAccess;
+    }
+
+
+    /** Opcional (testes antigos constroem sem ele): travas de VPN, banimento e registro de acesso. */
+    private com.example.backend.services.SecurityGate securityGate;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setSecurityGate(com.example.backend.services.SecurityGate securityGate) {
+        this.securityGate = securityGate;
+    }
+
     public AuthController(UserService userService, JwtService jwtService) {
         this.userService = userService;
         this.jwtService = jwtService;
@@ -34,6 +51,9 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@Valid @RequestBody UserDto registrationData) {
         try {
+            if (securityGate != null) {
+                securityGate.checkSignup(registrationData.getEmail());
+            }
             User newUser = userService.registerUser(
                     registrationData.getFullName(),
                     registrationData.getUsername(),
@@ -41,10 +61,13 @@ public class AuthController {
                     registrationData.getPassword(),
                     parseRegistrationRole(registrationData.getRole())
             );
+            if (securityGate != null) {
+                securityGate.record(com.example.backend.models.SecurityEvent.Type.SIGNUP, newUser, null);
+            }
                 return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                     "message", "Cadastro realizado com sucesso",
                     "token", jwtService.generateToken(newUser),
-                    "user", AuthUserResponse.from(newUser)
+                    "user", AuthUserResponse.from(newUser, adminAccess != null && adminAccess.isAdmin(newUser))
                 ));
         } catch (ResponseStatusException e) {
             // E-mail ou username já usados: 409, com a mensagem pronta para a tela.
@@ -73,19 +96,32 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> loginUser(@RequestBody LoginRequest loginRequest) {
         try {
+            if (securityGate != null) {
+                securityGate.checkLogin(loginRequest.getEmail());
+            }
             // Ajustado para enviar getEmail() em vez de getUsername()
             User authenticatedUser = userService.authenticateUser(
                     loginRequest.getEmail(),
                     loginRequest.getPassword()
             );
+            if (securityGate != null) {
+                securityGate.record(com.example.backend.models.SecurityEvent.Type.LOGIN_OK, authenticatedUser, null);
+            }
             
                 return ResponseEntity.ok(Map.of(
                     "message", "Login realizado com sucesso",
                     "token", jwtService.generateToken(authenticatedUser),
-                    "user", AuthUserResponse.from(authenticatedUser)
+                    "user", AuthUserResponse.from(authenticatedUser, adminAccess != null && adminAccess.isAdmin(authenticatedUser))
                 ));
 
+        } catch (ResponseStatusException e) {
+            // VPN ou acesso banido: 403 com a mensagem pronta para a tela.
+            return new ResponseEntity<>(e.getReason(), e.getStatusCode());
         } catch (RuntimeException e) {
+            if (securityGate != null) {
+                securityGate.record(com.example.backend.models.SecurityEvent.Type.LOGIN_FAIL, null,
+                        loginRequest.getEmail(), securityGate.info(), e.getMessage());
+            }
             return new ResponseEntity<>(e.getMessage(), HttpStatus.UNAUTHORIZED);
         }
     }

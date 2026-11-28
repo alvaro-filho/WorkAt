@@ -32,7 +32,9 @@ public record PostResponse(
         boolean reposted,
         boolean saved,
         long commentCount,
-        boolean commentsEnabled
+        boolean commentsEnabled,
+        /** Esperando a aprovação da moderação (conta nova): só o autor e o administrador veem. */
+        boolean pendingReview
 ) {
     /** coverUrl: só no aviso de projeto aberto (PROJECT_PUBLISHED), a capa do projeto. */
     public record ProjectRef(Long id, String name, ProjectType type, String coverUrl) {

@@ -21,6 +21,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** Diretório de artistas (Explorar › Artistas): contas de artista que não foram excluídas. */
     List<User> findByRoleAndDeletedFalse(com.example.backend.models.Role role);
 
+    /** Suspensões com prazo vencido (voltam sozinhas). */
+    List<User> findBySuspendedTrueAndSuspendedUntilBefore(java.time.LocalDateTime now);
+
     /**
      * Método para encontrar um usuário pelo e-mail.
      * JPA irá gerar a implementação do findByEmail.

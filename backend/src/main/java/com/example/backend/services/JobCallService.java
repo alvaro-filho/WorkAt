@@ -107,6 +107,7 @@ public class JobCallService {
             calls = callRepository.findOpen(today);
         }
         return calls.stream()
+                .filter(call -> !call.getAuthor().isBlocked())
                 .filter(call -> role == null || call.getRole() == role)
                 .filter(call -> format == null || call.getFormat() == format)
                 .filter(call -> location == null || call.getLocation() == location)
@@ -116,7 +117,11 @@ public class JobCallService {
 
     @Transactional(readOnly = true)
     public CallResponse get(Long id, User viewer) {
-        return toResponse(find(id), viewer);
+        JobCall call = find(id);
+        if (call.getAuthor().isBlocked()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Chamada não encontrada.");
+        }
+        return toResponse(call, viewer);
     }
 
     // ---- Publicar e editar ----

@@ -49,7 +49,8 @@ public class ProfileService {
 
     @Transactional(readOnly = true)
     public ProfileResponse profile(String username, User viewer) {
-        User owner = userRepository.findByUsername(username).filter(found -> !found.isDeleted())
+        User owner = userRepository.findByUsername(username)
+                .filter(found -> !found.isDeleted() && !found.isBlocked())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Perfil não encontrado."));
         boolean me = ProjectAccessService.sameUser(owner, viewer);
 

@@ -341,10 +341,17 @@ export function PostCard({
                   <Globe className="size-3" /> Ver projeto
                 </Link>
               )}
-              {!post.isPublic && (
-                <span className="inline-flex items-center gap-1">
-                  <Lock className="size-3" /> Só você e quem participa do projeto veem
+              {post.pendingReview ? (
+                <span className="inline-flex items-center gap-1 text-amber-300">
+                  <Lock className="size-3" /> Aguardando aprovação da moderação: só você vê por
+                  enquanto
                 </span>
+              ) : (
+                !post.isPublic && (
+                  <span className="inline-flex items-center gap-1">
+                    <Lock className="size-3" /> Só você e quem participa do projeto veem
+                  </span>
+                )
               )}
               {mine && post.hiddenFromPortfolio && (
                 <span className="inline-flex items-center gap-1">

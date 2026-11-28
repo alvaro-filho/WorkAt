@@ -73,6 +73,7 @@ public class ArtistDirectoryService {
     @Transactional(readOnly = true)
     public List<ArtistCard> explore(JobCall.Role role, boolean onlyAvailable, User viewer) {
         return userRepository.findByRoleAndDeletedFalse(Role.ARTIST).stream()
+                .filter(artist -> !artist.isBlocked())
                 .filter(artist -> !onlyAvailable || artist.isAvailableForWork())
                 .filter(artist -> matchesRole(artist.getSpecialties(), role))
                 .map(artist -> new Ranked(artist, works(artist)))
@@ -93,6 +94,7 @@ public class ArtistDirectoryService {
         String key = nudgeKey(call);
         return userRepository.findByRoleAndDeletedFalse(Role.ARTIST).stream()
                 .filter(User::isAvailableForWork)
+                .filter(artist -> !artist.isBlocked())
                 .filter(artist -> !interested.contains(artist.getId()))
                 .filter(artist -> matchesRole(artist.getSpecialties(), call.getRole()))
                 .map(artist -> new Ranked(artist, works(artist)))

@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { CalendarDays, Check, FolderKanban, Globe, Link2, Lock, Trash2 } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  FolderKanban,
+  Globe,
+  Link2,
+  Lock,
+  ShieldAlert,
+  Trash2,
+} from "lucide-react";
 
+import { ActionDialog } from "@/components/admin/AdminDialogs";
 import { ArtImage } from "@/components/art/ArtPieces";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ConfirmDialog } from "@/components/layout/ConfirmDialog";
@@ -11,7 +21,7 @@ import { PostActions } from "@/components/posts/PostActions";
 import { relativeTime, UserAvatar } from "@/components/posts/PostCard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { api, ApiError, type Post } from "@/lib/api";
+import { adminApi, api, ApiError, type Post } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 
 export const Route = createFileRoute("/_public/publicacao/$postId")({
@@ -39,6 +49,7 @@ function PostPage() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [moderating, setModerating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [viewing, setViewing] = useState<number | null>(null);
 
@@ -268,6 +279,15 @@ function PostPage() {
                   <Trash2 className="mr-1 size-4" /> Apagar
                 </Button>
               )}
+              {user?.admin && !mine && (
+                <Button
+                  variant="outline"
+                  className="rounded-full text-destructive"
+                  onClick={() => setModerating(true)}
+                >
+                  <ShieldAlert className="mr-1 size-4" /> Remover (moderação)
+                </Button>
+              )}
             </div>
 
             <CommentsPanel
@@ -328,6 +348,20 @@ function PostPage() {
         onIndexChange={setViewing}
         onClose={() => setViewing(null)}
       />
+      {user?.admin && (
+        <ActionDialog
+          open={moderating}
+          onOpenChange={setModerating}
+          title="Remover pela moderação"
+          description="A publicação é apagada, a prova fica guardada e o autor recebe o aviso de que ela quebrou as diretrizes, com o motivo."
+          confirmLabel="Remover"
+          destructive
+          onConfirm={async ({ reason }) => {
+            await adminApi.removePost(post.id, reason);
+            void navigate({ to: "/explorar" });
+          }}
+        />
+      )}
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}

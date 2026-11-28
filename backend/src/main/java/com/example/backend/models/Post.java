@@ -98,6 +98,13 @@ public class Post {
     public void setTitle(String title) { this.title = title; }
     public String getSubtitle() { return subtitle; }
     public void setSubtitle(String subtitle) { this.subtitle = subtitle; }
+    /** Esperando a aprovação do administrador (conta nova): só o autor vê até ser aprovada. */
+    @Column(name = "pending_review", nullable = false, columnDefinition = "boolean default false")
+    private boolean pendingReview = false;
+
+    public boolean isPendingReview() { return pendingReview; }
+    public void setPendingReview(boolean pendingReview) { this.pendingReview = pendingReview; }
+
     public boolean isHiddenFromPortfolio() { return hiddenFromPortfolio; }
     public void setHiddenFromPortfolio(boolean hiddenFromPortfolio) { this.hiddenFromPortfolio = hiddenFromPortfolio; }
     public List<PostImage> getImages() { return images; }

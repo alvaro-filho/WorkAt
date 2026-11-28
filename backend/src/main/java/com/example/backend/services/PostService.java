@@ -94,13 +94,32 @@ public class PostService {
                 && (project.getNdaReleaseDate() == null || project.getNdaReleaseDate().isAfter(BusinessTime.today()));
     }
 
-    /** Projeto aberto ao público: WIP automático ligado e sem NDA ativo. */
+    /** Projeto aberto ao público: WIP automático ligado, sem NDA ativo e diretor sem suspensão ou banimento. */
     public static boolean isProjectPublic(Project project) {
+        return isProjectPublicContent(project)
+                && (project.getCreatedByUser() == null
+                    || (!project.getCreatedByUser().isBlocked() && project.getCreatedByUser().isTrusted()));
+    }
+
+    /** As regras do projeto (WIP automático e NDA), sem olhar a situação da conta do diretor. */
+    public static boolean isProjectPublicContent(Project project) {
         return project != null && project.isAutoWip() && !ndaBlocks(project);
     }
 
-    /** Espelha a consulta PostRepository.findPublicFeed. */
+    /** Espelha a consulta PostRepository.findPublicFeed: conteúdo público e autor sem suspensão ou banimento. */
     public static boolean isPublic(Post post) {
+        if (post.isPendingReview() || (post.getAuthor() != null && post.getAuthor().isBlocked())) {
+            return false;
+        }
+        Project project = post.getProject();
+        if (project != null && project.getCreatedByUser() != null && project.getCreatedByUser().isBlocked()) {
+            return false;
+        }
+        return isPublicContent(post);
+    }
+
+    /** O conteúdo é público pelas regras de projeto e NDA (o painel de administração enxerga só isso). */
+    public static boolean isPublicContent(Post post) {
         Project project = post.getProject();
         if (project == null) {
             return true;
@@ -108,11 +127,35 @@ public class PostService {
         if (post.getKind() == PostKind.STANDALONE) {
             return !ndaBlocks(project);
         }
-        return isProjectPublic(project) && (post.getTask() == null || !post.getTask().isHiddenFromPublic());
+        return isProjectPublicContent(project) && (post.getTask() == null || !post.getTask().isHiddenFromPublic());
+    }
+
+    /** Opcional: avisa o administrador quando chega publicação de conta nova para aprovar. */
+    private ModerationNotifier moderationNotifier;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setModerationNotifier(ModerationNotifier moderationNotifier) {
+        this.moderationNotifier = moderationNotifier;
+    }
+
+    private Post pendingNotice(Post saved) {
+        if (saved.isPendingReview() && moderationNotifier != null) {
+            moderationNotifier.pendingPost(saved);
+        }
+        return saved;
+    }
+
+    /** Opcional: o administrador vê o conteúdo público de contas suspensas (nunca o privado ou sob NDA). */
+    private AdminAccess adminAccess;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setAdminAccess(AdminAccess adminAccess) {
+        this.adminAccess = adminAccess;
     }
 
     public boolean canView(Post post, User viewer) {
         return isPublic(post)
+                || (adminAccess != null && adminAccess.isAdmin(viewer) && isPublicContent(post))
                 || ProjectAccessService.sameUser(post.getAuthor(), viewer)
                 || (post.getProject() != null && viewer != null && access.roleOf(post.getProject(), viewer).isPresent());
     }
@@ -237,6 +280,7 @@ public class PostService {
         Post post = new Post();
         post.setAuthor(author);
         post.setKind(PostKind.STANDALONE);
+        post.setPendingReview(!author.isTrusted());
         post.setTitle(cleanTitle(title));
         post.setSubtitle(cleanSubtitle(subtitle));
         for (int index = 0; index < images.size(); index++) {
@@ -250,7 +294,7 @@ public class PostService {
             }
             post.addImage(PostImage.ofStored(storedName, IMAGE_TYPES.get(extension), file.getSize()));
         }
-        return postRepository.save(post);
+        return pendingNotice(postRepository.save(post));
     }
 
     // ---- Reações: curtir, republicar, salvar ----
@@ -303,13 +347,14 @@ public class PostService {
         Post post = new Post();
         post.setAuthor(user);
         post.setKind(PostKind.STANDALONE);
+        post.setPendingReview(!user.isTrusted());
         post.setProject(task.getProject());
         post.setTask(task);
         String cleanTitle = cleanTitle(title);
         post.setTitle(cleanTitle == null ? task.getTitle() : cleanTitle);
         post.setSubtitle(cleanSubtitle(subtitle));
         post.addImage(PostImage.ofTaskFile(file));
-        return postRepository.save(post);
+        return pendingNotice(postRepository.save(post));
     }
 
     @Transactional
@@ -365,12 +410,13 @@ public class PostService {
                     Post created = new Post();
                     created.setAuthor(file.getUploadedBy());
                     created.setKind(PostKind.WIP);
+                    created.setPendingReview(!file.getUploadedBy().isTrusted());
                     created.setProject(project);
                     created.setTask(task);
                     return created;
                 });
         post.addImage(PostImage.ofTaskFile(file));
-        return Optional.of(postRepository.save(post));
+        return Optional.of(pendingNotice(postRepository.save(post)));
     }
 
     /**
@@ -385,6 +431,7 @@ public class PostService {
         Post post = new Post();
         post.setAuthor(owner);
         post.setKind(PostKind.PROJECT_PUBLISHED);
+        post.setPendingReview(!owner.isTrusted());
         post.setProject(project);
         fileRepository.findByTask_Project(project).stream()
                 .filter(file -> TaskFileService.isPreviewableImage(file.getContentType()))
@@ -392,7 +439,7 @@ public class PostService {
                 .sorted(Comparator.comparing(TaskFile::getCreatedAt).reversed())
                 .limit(4)
                 .forEach(file -> post.addImage(PostImage.ofTaskFile(file)));
-        return Optional.of(postRepository.save(post));
+        return Optional.of(pendingNotice(postRepository.save(post)));
     }
 
     /** Arquivos de tarefa apagados saem das publicações; publicação que fica sem imagem some (menos o aviso de projeto). */
@@ -550,7 +597,8 @@ public class PostService {
                 mine.contains(PostReaction.Type.REPOST),
                 mine.contains(PostReaction.Type.SAVE),
                 commentCount,
-                PostCommentService.postCommentsOn(post));
+                PostCommentService.postCommentsOn(post),
+                post.isPendingReview());
     }
 
     static String labelOf(Post post) {

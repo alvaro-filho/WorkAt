@@ -21,6 +21,14 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    /** Só para testes locais (ARTHUB_TRUST_NEW_ACCOUNTS=true): conta nova publica sem esperar aprovação. */
+    private boolean trustNewAccounts = false;
+
+    @org.springframework.beans.factory.annotation.Value("${app.security.trust-new-accounts:false}")
+    public void setTrustNewAccounts(boolean trustNewAccounts) {
+        this.trustNewAccounts = trustNewAccounts;
+    }
+
     /**
      * Registra um novo usuário no sistema.
      * @param username Nome de usuário desejado.
@@ -40,6 +48,7 @@ public class UserService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email já está em uso.");
         }
 
+        // V3.1: conta nova começa em quarentena (publicações esperam aprovação). Ver User.trusted.
         // 1. Hash da senha
         String hashedPassword = passwordEncoder.encode(password);
 
@@ -53,6 +62,7 @@ public class UserService {
         newUser.setUserType(role.name());
 
         // 3. Persistência
+        newUser.setTrusted(trustNewAccounts);
         return userRepository.save(newUser);
     }
 
@@ -71,6 +81,23 @@ public class UserService {
     if (password == null || !passwordEncoder.matches(password, user.getPassword())) {
         throw new RuntimeException("E-mail ou senha incorretos.");
     }
+    if (user.isBanned()) {
+        throw new RuntimeException("Esta conta foi banida da WorkAt.");
+    }
+    if (user.isSuspended()) {
+        if (user.isBlocked()) {
+            String until = user.getSuspendedUntil() == null ? "sem prazo para voltar"
+                    : "até " + user.getSuspendedUntil().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy 'às' HH:mm"));
+            String reason = user.getSuspensionReason() == null ? "" : " Motivo: " + user.getSuspensionReason();
+            throw new RuntimeException("Sua conta está suspensa, " + until + "." + reason);
+        }
+        // O prazo da suspensão já passou: a conta volta sozinha.
+        user.setSuspended(false);
+        user.setSuspendedUntil(null);
+        user.setSuspensionReason(null);
+    }
+    user.setLastLoginAt(java.time.LocalDateTime.now());
+    userRepository.save(user);
 
     return user;
 }

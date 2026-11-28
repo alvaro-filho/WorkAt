@@ -257,16 +257,22 @@ public class PostCommentService {
                 top.add(toResponse(comment, canDelete, replies.getOrDefault(comment.getId(), List.of())));
             }
         }
-        int count = (int) all.stream().filter(comment -> !comment.isRemoved()).count();
+        int count = (int) all.stream().filter(comment -> !hidden(comment)).count();
         return new CommentThreadResponse(enabled, canToggle, count, top);
     }
 
     private static CommentThreadResponse.Comment toResponse(PostComment comment, DeleteRule canDelete,
                                                             List<CommentThreadResponse.Comment> replies) {
+        boolean hidden = hidden(comment);
         return new CommentThreadResponse.Comment(comment.getId(),
-                comment.isRemoved() ? null : UserSummary.from(comment.getAuthor()),
-                comment.isRemoved() ? null : comment.getBody(), comment.isRemoved(), comment.getCreatedAt(),
-                canDelete.test(comment), replies);
+                hidden ? null : UserSummary.from(comment.getAuthor()),
+                hidden ? null : comment.getBody(), hidden, comment.getCreatedAt(),
+                !hidden && canDelete.test(comment), replies);
+    }
+
+    /** Removido, ou de conta suspensa ou banida: aparece como "Comentário removido". */
+    private static boolean hidden(PostComment comment) {
+        return comment.isRemoved() || (comment.getAuthor() != null && comment.getAuthor().isBlocked());
     }
 
     /** Avisa o dono da publicação/projeto e, numa resposta, quem fez o comentário respondido (nunca a si mesmo). */

@@ -82,16 +82,24 @@ public class TaskFileService {
         return quotaBytes;
     }
 
+    /** Cota desta pessoa: a definida no painel de administração ou a padrão do servidor. */
+    public long quotaBytes(User user) {
+        return user != null && user.getStorageQuotaMb() != null
+                ? Math.max(0, user.getStorageQuotaMb()) * 1024L * 1024L
+                : quotaBytes;
+    }
+
     /** Recusa o envio que passaria da cota da pessoa. */
     public void ensureQuota(User user, long incomingBytes) {
-        if (quotaBytes <= 0) {
+        long limit = quotaBytes(user);
+        if (limit <= 0) {
             return;
         }
         long used = usedBytes(user);
-        if (used + incomingBytes > quotaBytes) {
-            long freeMb = Math.max(0, quotaBytes - used) / (1024 * 1024);
+        if (used + incomingBytes > limit) {
+            long freeMb = Math.max(0, limit - used) / (1024 * 1024);
             throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,
-                    "Seu espaço acabou: restam " + freeMb + " MB de " + (quotaBytes / (1024 * 1024))
+                    "Seu espaço acabou: restam " + freeMb + " MB de " + (limit / (1024 * 1024))
                             + " MB. Apague versões antigas para liberar espaço.");
         }
     }

@@ -107,6 +107,10 @@ public class AccountService {
         return taskFileService.quotaBytes();
     }
 
+    public long quotaBytes(User user) {
+        return taskFileService.quotaBytes(user);
+    }
+
     /**
      * Disponível para trabalho (só artistas). Ligado: ao menos um formato e, fora do remoto, a cidade.
      * Desligado: guarda as escolhas para a próxima vez, mas o selo some do perfil e do Explorar.
@@ -254,6 +258,10 @@ public class AccountService {
      */
     @Transactional
     public User uploadAvatar(User user, MultipartFile file, MultipartFile original, String crop) {
+        if (!user.isTrusted()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Foto e capa ficam liberadas depois que a moderação aprovar sua primeira publicação.");
+        }
         StoredImage image = storeProfileImage(file, AVATAR_MAX_BYTES, "foto");
         String old = user.getAvatarStoredName();
         user.setAvatarStoredName(image.storedName());
@@ -278,6 +286,10 @@ public class AccountService {
 
     @Transactional
     public User uploadBanner(User user, MultipartFile file, MultipartFile original, String crop) {
+        if (!user.isTrusted()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Foto e capa ficam liberadas depois que a moderação aprovar sua primeira publicação.");
+        }
         StoredImage image = storeProfileImage(file, BANNER_MAX_BYTES, "capa");
         String old = user.getBannerStoredName();
         user.setBannerStoredName(image.storedName());

@@ -32,6 +32,14 @@ public class User {
 
     private LocalDateTime createdAt;
 
+    /** Data de cadastro (as contas antigas, de antes da V3.1, podem não ter). */
+    @PrePersist
+    void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
+
     // ---- Perfil público (portfólio) ----
 
     @Column(columnDefinition = "TEXT")
@@ -85,6 +93,73 @@ public class User {
     /** Permite ser convidado pelo @usuário (além do e-mail). Desligado: só por e-mail. */
     @Column(name = "invite_by_username", nullable = false, columnDefinition = "boolean default true")
     private boolean inviteByUsername = true;
+
+    // ---- Moderação (painel de administração) ----
+
+    /** Suspensa: não entra e some do público. suspendedUntil null = sem prazo. */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean suspended = false;
+
+    @Column(name = "suspended_until")
+    private LocalDateTime suspendedUntil;
+
+    @Column(name = "suspension_reason", length = 500)
+    private String suspensionReason;
+
+    /** Banida: definitivo; o conteúdo foi apagado e o e-mail fica preso a esta conta (não recadastra). */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean banned = false;
+
+    @Column(name = "banned_at")
+    private LocalDateTime bannedAt;
+
+    @Column(name = "ban_reason", length = 500)
+    private String banReason;
+
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
+
+    /** Cota só desta pessoa, em MB (null = a cota padrão do servidor). */
+    @Column(name = "storage_quota_mb")
+    private Integer storageQuotaMb;
+
+    /** Anotação interna do administrador (a pessoa não vê). */
+    @Column(name = "admin_note", columnDefinition = "TEXT")
+    private String adminNote;
+
+    /**
+     * Conta de confiança: publica direto. Conta nova começa sem confiança (as publicações esperam a aprovação do
+     * administrador, e foto e capa ficam travadas). Contas que já existiam antes da V3.1 são de confiança.
+     */
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean trusted = true;
+
+    public boolean isTrusted() { return trusted; }
+    public void setTrusted(boolean trusted) { this.trusted = trusted; }
+
+    /** Não entra e não aparece: banida, ou suspensa sem prazo ou com o prazo ainda correndo. */
+    public boolean isBlocked() {
+        return banned || (suspended && (suspendedUntil == null || suspendedUntil.isAfter(LocalDateTime.now())));
+    }
+
+    public boolean isSuspended() { return suspended; }
+    public void setSuspended(boolean suspended) { this.suspended = suspended; }
+    public LocalDateTime getSuspendedUntil() { return suspendedUntil; }
+    public void setSuspendedUntil(LocalDateTime suspendedUntil) { this.suspendedUntil = suspendedUntil; }
+    public String getSuspensionReason() { return suspensionReason; }
+    public void setSuspensionReason(String suspensionReason) { this.suspensionReason = suspensionReason; }
+    public boolean isBanned() { return banned; }
+    public void setBanned(boolean banned) { this.banned = banned; }
+    public LocalDateTime getBannedAt() { return bannedAt; }
+    public void setBannedAt(LocalDateTime bannedAt) { this.bannedAt = bannedAt; }
+    public String getBanReason() { return banReason; }
+    public void setBanReason(String banReason) { this.banReason = banReason; }
+    public LocalDateTime getLastLoginAt() { return lastLoginAt; }
+    public void setLastLoginAt(LocalDateTime lastLoginAt) { this.lastLoginAt = lastLoginAt; }
+    public Integer getStorageQuotaMb() { return storageQuotaMb; }
+    public void setStorageQuotaMb(Integer storageQuotaMb) { this.storageQuotaMb = storageQuotaMb; }
+    public String getAdminNote() { return adminNote; }
+    public void setAdminNote(String adminNote) { this.adminNote = adminNote; }
 
     // ---- Disponível para trabalho (só artistas) ----
 

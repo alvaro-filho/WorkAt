@@ -35,6 +35,14 @@ public class PostController {
         this.taskFileService = taskFileService;
     }
 
+    /** Opcional (testes antigos constroem sem ele): travas de VPN, banimento e registro de acesso. */
+    private com.example.backend.services.SecurityGate securityGate;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setSecurityGate(com.example.backend.services.SecurityGate securityGate) {
+        this.securityGate = securityGate;
+    }
+
     public PostController(PostService postService, UserRepository userRepository) {
         this.postService = postService;
         this.userRepository = userRepository;
@@ -74,6 +82,7 @@ public class PostController {
                                                @RequestParam(value = "subtitle", required = false) String subtitle,
                                                Authentication authentication) {
         User user = requireUser(authentication);
+        if (securityGate != null) securityGate.checkPosting(user, com.example.backend.models.SecurityEvent.Type.POST);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(postService.toResponse(createWithinQuota(user, files, title, subtitle), user));
     }
@@ -83,6 +92,7 @@ public class PostController {
                                                         @RequestBody(required = false) Map<String, String> body,
                                                         Authentication authentication) {
         User user = requireUser(authentication);
+        if (securityGate != null) securityGate.checkPosting(user, com.example.backend.models.SecurityEvent.Type.POST);
         Map<String, String> fields = body == null ? Map.of() : body;
         return ResponseEntity.status(HttpStatus.CREATED).body(postService.toResponse(
                 postService.publishTaskFile(fileId, user, fields.get("title"), fields.get("subtitle")), user));

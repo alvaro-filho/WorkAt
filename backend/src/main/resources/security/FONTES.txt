@@ -1,0 +1,4 @@
+# Fontes (baixadas em 27/11/2026):
+# vpn-ipv4.txt: X4BNet/lists_vpn (vpn + datacenter, ipv4) e a lista de saídas do Tor (check.torproject.org)
+# disposable-domains.txt: disposable-email-domains/disposable-email-domains
+# Para atualizar, baixe de novo e substitua os arquivos.
