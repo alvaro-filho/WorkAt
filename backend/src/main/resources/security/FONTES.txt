@@ -2,3 +2,5 @@
 # vpn-ipv4.txt: X4BNet/lists_vpn (vpn + datacenter, ipv4) e a lista de saídas do Tor (check.torproject.org)
 # disposable-domains.txt: disposable-email-domains/disposable-email-domains
 # Para atualizar, baixe de novo e substitua os arquivos.
+# vpn-ipv4.txt também inclui todas as faixas EC2 da Amazon (ip-ranges.amazonaws.com), baixadas em 28/11/2026:
+# o proxy da Vercel sai da Amazon, e o backend precisa reconhecê-lo como datacenter para achar o IP real.
