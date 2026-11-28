@@ -18,9 +18,13 @@ public class ClientContext {
      * estiver atrás de um proxy que sempre o sobrescreve. Vazio: usa o X-Forwarded-For pelo lado direito.
      */
     private static volatile String trustedHeader = "";
+    /** Listas de datacenter: o proxy da Vercel sai de um datacenter (Amazon), uma pessoa normalmente não. */
+    private static volatile NetworkLists lists;
 
-    public ClientContext(@org.springframework.beans.factory.annotation.Value("${app.security.client-ip-header:}") String header) {
+    public ClientContext(@org.springframework.beans.factory.annotation.Value("${app.security.client-ip-header:}") String header,
+                         NetworkLists networkLists) {
         trustedHeader = header == null ? "" : header.trim();
+        lists = networkLists;
     }
 
     public record Info(String ip, String userAgent, String deviceId, String forwardedChain) {
@@ -39,11 +43,11 @@ public class ClientContext {
             return Info.NONE;
         }
         String forwarded = request.getHeader("X-Forwarded-For");
-        // X-Forwarded-For: cada proxy acrescenta à direita, então o que vem à esquerda pode ser falsificado;
-        // vale o IP público mais à direita (o que o proxy do Render viu). Cabeçalhos como CF-Connecting-IP só
-        // contam se configurados (o navegador também consegue mandá-los).
-        String ip = firstNonBlank(trustedHeader.isEmpty() ? null : request.getHeader(trustedHeader),
-                rightmostPublic(forwarded), request.getRemoteAddr());
+        String ip = trustedHeader.isEmpty() ? null : request.getHeader(trustedHeader);
+        if (ip == null || ip.isBlank()) {
+            ip = clientIp(request.getHeader("CF-Connecting-IP"), forwarded,
+                    request.getHeader("X-Vercel-Forwarded-For"), request.getRemoteAddr(), lists);
+        }
         return new Info(clean(ip, 64), clean(request.getHeader("User-Agent"), 300),
                 validDevice(request.getHeader("X-Device-Id")), clean(forwarded, 300));
     }
@@ -55,6 +59,26 @@ public class ClientContext {
         }
         String trimmed = value.trim();
         return trimmed.matches("[A-Za-z0-9-]{8,64}") ? trimmed : null;
+    }
+
+    /**
+     * Caminho em produção: navegador → Vercel → Cloudflare → Render.
+     * 1. Quem conectou (edge): o CF-Connecting-IP, posto pela Cloudflare do Render (ninguém falsifica); sem ele
+     *    (no computador local), o IP público mais à direita do X-Forwarded-For.
+     * 2. Se quem conectou é um datacenter e veio o X-Vercel-Forwarded-For, a chamada passou pelo proxy da Vercel:
+     *    o IP real é o que a Vercel informou. Se não, vale o próprio edge (quem chama o Render direto).
+     */
+    static String clientIp(String cfConnectingIp, String forwarded, String vercelForwarded, String remoteAddr,
+                           NetworkLists networkLists) {
+        String edge = cfConnectingIp != null && !cfConnectingIp.isBlank() ? cfConnectingIp.trim()
+                : firstNonBlank(rightmostPublic(forwarded), remoteAddr);
+        if (vercelForwarded != null && !vercelForwarded.isBlank() && networkLists != null && networkLists.isVpn(edge)) {
+            String viaVercel = vercelForwarded.split(",")[0].trim();
+            if (!viaVercel.isEmpty() && !isPrivate(viaVercel)) {
+                return viaVercel;
+            }
+        }
+        return edge;
     }
 
     /** O IP público mais à direita do X-Forwarded-For (ignora os da rede interna dos proxies). */
